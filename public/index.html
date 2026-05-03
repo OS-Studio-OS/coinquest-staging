@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <title>CoinQuest</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -717,7 +718,7 @@ async function redeemPromo() {
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 async function loadAdminStats() {
   try {
-    const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') } });
     const data = await res.json();
     if (data.success) {
       document.getElementById('admin-stats').innerHTML =
@@ -728,7 +729,7 @@ async function loadAdminStats() {
 
 async function loadAdminPromos() {
   try {
-    const res = await fetch('/api/admin/list-promos', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const res = await fetch('/api/admin/list-promos', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') } });
     const data = await res.json();
     if (data.success) {
       document.getElementById('admin-promos-list').innerHTML = data.promos.map(p =>
@@ -747,7 +748,7 @@ async function adminCreatePromo() {
   try {
     const res = await fetch('/api/admin/promos', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ action: 'create', code, rewardCoins: coins, rewardTp: tp, maxUses })
     });
     const data = await res.json();
@@ -764,7 +765,7 @@ async function adminGiveCoins() {
   try {
     const res = await fetch('/api/admin/give-coins', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ userId, coins, tp })
     });
     const data = await res.json();
