@@ -150,6 +150,17 @@ if (taskCount.c === 0) {
   `);
 }
 
+// Миграции — добавляем колонки если их нет (для существующих БД)
+const existingCols = db.pragma('table_info(users)').map(c => c.name);
+if (!existingCols.includes('username')) {
+  db.exec('ALTER TABLE users ADD COLUMN username TEXT');
+  console.log('Migration: added username column to users');
+}
+if (!existingCols.includes('referral_earnings')) {
+  db.exec('ALTER TABLE users ADD COLUMN referral_earnings INTEGER DEFAULT 0');
+  console.log('Migration: added referral_earnings column to users');
+}
+
 const promoCount = db.prepare('SELECT COUNT(*) as c FROM promos').get();
 if (promoCount.c === 0) {
   db.exec(`
