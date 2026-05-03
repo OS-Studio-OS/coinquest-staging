@@ -422,6 +422,7 @@ async function init() {
     if (data.referralEarned) document.getElementById('referral-earned').textContent = data.referralEarned.toLocaleString();
     if (state.isAdmin) document.getElementById('admin-panel').classList.remove('hidden');
     renderTasks();
+    loadFriends();
     if (data.user.idleEarned > 0) showToast(`💰 Пока тебя не было: +${data.user.idleEarned.toLocaleString()} монет`);
   } catch (e) { console.error('Init error:', e); }
 }
@@ -461,7 +462,7 @@ async function sendTaps() {
   try {
     const res = await fetch('/api/tap', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ taps })
     });
     const data = await res.json();
@@ -532,7 +533,7 @@ async function buyStars(packageId) {
   try {
     const res = await fetch('/api/stars-invoice', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ packageId })
     });
     const data = await res.json();
@@ -554,7 +555,7 @@ async function buyBoost(boostType) {
   try {
     const res = await fetch('/api/buy-boost', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ boostType })
     });
     const data = await res.json();
@@ -596,7 +597,7 @@ async function claimTask(taskId) {
   try {
     const res = await fetch('/api/claim-task', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ taskId })
     });
     const data = await res.json();
@@ -614,7 +615,7 @@ async function claimTask(taskId) {
 async function loadTournament() {
   try {
     const res = await fetch('/api/tournament', {
-      headers: { 'x-telegram-init-data': tg?.initData || '' }
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
     });
     const data = await res.json();
     const el = document.getElementById('tournament-content');
@@ -657,7 +658,7 @@ async function joinTournament() {
   try {
     const res = await fetch('/api/tournament-invoice', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' }
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
     });
     const data = await res.json();
     if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
@@ -669,7 +670,7 @@ async function joinTournament() {
 // ── FRIENDS ───────────────────────────────────────────────────────────────
 async function loadFriends() {
   try {
-    const res = await fetch('/api/referrals', { headers: { 'x-telegram-init-data': tg?.initData || '' } });
+    const res = await fetch('/api/referrals', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') } });
     const data = await res.json();
     if (!data.success) return;
     if (data.referralLink) {
@@ -701,7 +702,7 @@ async function redeemPromo() {
   try {
     const res = await fetch('/api/redeem-promo', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ code })
     });
     const data = await res.json();
@@ -716,7 +717,7 @@ async function redeemPromo() {
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 async function loadAdminStats() {
   try {
-    const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
     const data = await res.json();
     if (data.success) {
       document.getElementById('admin-stats').innerHTML =
@@ -727,7 +728,7 @@ async function loadAdminStats() {
 
 async function loadAdminPromos() {
   try {
-    const res = await fetch('/api/admin/list-promos', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const res = await fetch('/api/admin/list-promos', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
     const data = await res.json();
     if (data.success) {
       document.getElementById('admin-promos-list').innerHTML = data.promos.map(p =>
@@ -746,7 +747,7 @@ async function adminCreatePromo() {
   try {
     const res = await fetch('/api/admin/promos', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
       body: JSON.stringify({ action: 'create', code, rewardCoins: coins, rewardTp: tp, maxUses })
     });
     const data = await res.json();
@@ -763,7 +764,7 @@ async function adminGiveCoins() {
   try {
     const res = await fetch('/api/admin/give-coins', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || ''), 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
       body: JSON.stringify({ userId, coins, tp })
     });
     const data = await res.json();
