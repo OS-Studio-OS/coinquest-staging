@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CoinQuest</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { background: #0a0a0f; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; overflow-x: hidden; }
+
+  /* TOP BAR */
+  .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 8px; }
+  .stat-box { display: flex; align-items: center; gap: 6px; background: #1a1a2e; border-radius: 12px; padding: 6px 12px; }
+  .stat-box .icon { font-size: 18px; }
+  .stat-box .value { font-size: 15px; font-weight: 700; color: #fff; }
+  .stat-coins { border: 1px solid #f5c518; }
+  .stat-tp { border: 1px solid #8b5cf6; }
+  .stat-coins .value { color: #f5c518; }
+  .stat-tp .value { color: #c4b5fd; }
+
+  /* ENERGY BAR */
+  .energy-bar { margin: 0 16px 8px; }
+  .energy-label { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 4px; }
+  .energy-track { height: 8px; background: #1a1a2e; border-radius: 4px; overflow: hidden; }
+  .energy-fill { height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 4px; transition: width 0.3s; }
+
+  /* INCOME ROW */
+  .income-row { display: flex; justify-content: center; gap: 20px; padding: 4px 16px 8px; }
+  .income-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #aaa; }
+  .income-item span { color: #fff; font-weight: 600; }
+
+  /* COIN */
+  .coin-area { display: flex; flex-direction: column; align-items: center; padding: 8px 0 4px; }
+  .coin-btn { width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #d97706); border: none; cursor: pointer; font-size: 80px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 40px rgba(245,158,11,0.5), 0 0 80px rgba(245,158,11,0.2); transition: transform 0.08s; user-select: none; -webkit-user-select: none; }
+  .coin-btn:active { transform: scale(0.93); }
+  .coin-hint { font-size: 13px; color: #888; margin-top: 8px; }
+
+  /* UPGRADES */
+  .section { margin: 8px 16px; }
+  .section-title { font-size: 14px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .upgrade-row { display: flex; gap: 10px; }
+  .upgrade-card { flex: 1; background: #111827; border: 1px solid #374151; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .upgrade-name { font-size: 13px; color: #d1d5db; }
+  .upgrade-cost { font-size: 12px; color: #f5c518; display: flex; align-items: center; gap: 3px; }
+  .btn-buy { background: #f5c518; color: #000; border: none; border-radius: 8px; padding: 7px 0; font-size: 13px; font-weight: 700; cursor: pointer; width: 100%; transition: opacity 0.2s; }
+  .btn-buy:active { opacity: 0.8; }
+  .btn-buy:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+
+  /* BONUS */
+  .btn-bonus { display: flex; align-items: center; justify-content: center; gap: 8px; background: #059669; color: #fff; border: none; border-radius: 12px; padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer; width: calc(100% - 32px); margin: 8px 16px; transition: opacity 0.2s; }
+  .btn-bonus:active { opacity: 0.8; }
+
+  /* SHOP */
+  .shop-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .shop-tab { flex: 1; padding: 8px; background: #1a1a2e; border: 1px solid #374151; border-radius: 10px; font-size: 13px; font-weight: 600; color: #aaa; cursor: pointer; text-align: center; transition: all 0.2s; }
+  .shop-tab.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .shop-card { background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px; text-align: center; }
+  .shop-card .coins-amount { font-size: 20px; font-weight: 800; color: #06b6d4; }
+  .shop-card .price { font-size: 12px; color: #9ca3af; margin: 4px 0 8px; }
+  .btn-shop { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 8px 0; font-size: 13px; font-weight: 700; cursor: pointer; width: 100%; }
+  .btn-shop:active { opacity: 0.8; }
+
+  /* TABS */
+  .tab-content { display: none; padding-bottom: 80px; }
+  .tab-content.active { display: block; }
+
+  /* BOTTOM NAV */
+  .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0f0f1a; border-top: 1px solid #1f2937; display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 0 8px; cursor: pointer; transition: color 0.2s; color: #6b7280; font-size: 10px; gap: 3px; }
+  .nav-item .nav-icon { font-size: 22px; }
+  .nav-item.active { color: #06b6d4; }
+
+  /* TASKS */
+  .task-card { background: #111827; border: 1px solid #374151; border-radius: 14px; padding: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+  .task-icon { font-size: 28px; width: 44px; text-align: center; }
+  .task-info { flex: 1; }
+  .task-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .task-desc { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+  .task-progress { height: 4px; background: #1f2937; border-radius: 2px; overflow: hidden; }
+  .task-progress-fill { height: 100%; background: #8b5cf6; border-radius: 2px; transition: width 0.3s; }
+  .task-reward { font-size: 12px; color: #f5c518; margin-top: 4px; }
+  .btn-claim { background: #059669; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-claim:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+  .btn-claim.claimed { background: #1f2937; color: #6b7280; }
+
+  /* TOURNAMENT */
+  .tournament-card { background: linear-gradient(135deg, #1e1b4b, #2d1b69); border: 1px solid #7c3aed; border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+  .tournament-title { font-size: 18px; font-weight: 800; color: #c4b5fd; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .prize-pool { text-align: center; margin: 12px 0; }
+  .prize-amount { font-size: 32px; font-weight: 900; color: #f5c518; }
+  .prize-label { font-size: 13px; color: #9ca3af; }
+  .tournament-info { display: flex; justify-content: space-around; margin: 12px 0; }
+  .t-info-item { text-align: center; }
+  .t-info-value { font-size: 16px; font-weight: 700; color: #fff; }
+  .t-info-label { font-size: 11px; color: #9ca3af; }
+  .tournament-split { font-size: 12px; color: #9ca3af; text-align: center; margin: 8px 0; }
+  .btn-tournament { background: #7c3aed; color: #fff; border: none; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 12px; }
+  .btn-tournament:active { opacity: 0.8; }
+  .btn-tournament.joined { background: #059669; cursor: default; }
+  .timer { color: #f97316; font-size: 13px; text-align: center; margin-top: 8px; }
+
+  /* LEADERBOARD */
+  .leader-card { background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 12px; }
+  .leader-rank { font-size: 20px; width: 32px; text-align: center; }
+  .leader-info { flex: 1; }
+  .leader-name { font-size: 14px; font-weight: 600; }
+  .leader-tp { font-size: 12px; color: #c4b5fd; }
+  .leader-score { font-size: 15px; font-weight: 700; color: #f5c518; }
+
+  /* FRIENDS */
+  .referral-box { background: #111827; border: 1px solid #374151; border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  .referral-link { font-size: 12px; color: #06b6d4; word-break: break-all; margin: 8px 0; background: #0f172a; padding: 8px; border-radius: 8px; }
+  .btn-copy { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; }
+  .friend-card { background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .friend-avatar { width: 36px; height: 36px; border-radius: 50%; background: #4f46e5; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .friend-info { flex: 1; }
+  .friend-name { font-size: 14px; font-weight: 600; }
+  .friend-coins { font-size: 12px; color: #f5c518; }
+  .earned-badge { background: #064e3b; color: #34d399; border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
+
+  /* MORE / ADMIN */
+  .more-card { background: #111827; border: 1px solid #374151; border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+  .more-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: #e5e7eb; }
+  .promo-row { display: flex; gap: 8px; }
+  .promo-input { flex: 1; background: #0f172a; border: 1px solid #374151; border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 14px; }
+  .promo-input::placeholder { color: #6b7280; }
+  .btn-promo { background: #f5c518; color: #000; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+  /* ADMIN PANEL */
+  .admin-section { background: #111827; border: 1px solid #7c3aed; border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+  .admin-title { font-size: 14px; font-weight: 700; color: #c4b5fd; margin-bottom: 10px; }
+  .admin-input { width: 100%; background: #0f172a; border: 1px solid #374151; border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 13px; margin-bottom: 6px; }
+  .btn-admin { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .promo-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1f2937; font-size: 13px; }
+  .promo-list-item:last-child { border-bottom: none; }
+
+  /* TOAST */
+  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* FLOAT COINS */
+  .float-coin { position: fixed; font-size: 18px; font-weight: 800; color: #f5c518; pointer-events: none; z-index: 500; animation: floatUp 0.8s ease-out forwards; }
+  @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-80px); } }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- TAB: UPGRADES (main) -->
+<div class="tab-content active" id="tab-upgrades">
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="stat-box stat-coins">
+      <span class="icon">🪙</span>
+      <span class="value" id="coins-display">0</span>
+    </div>
+    <div class="stat-box stat-tp">
+      <span class="icon">🏆</span>
+      <span class="value" id="tp-display">0</span>
+      <span style="font-size:11px;color:#9ca3af;margin-left:2px">TP</span>
+    </div>
+  </div>
+
+  <!-- Energy -->
+  <div class="energy-bar">
+    <div class="energy-label">
+      <span>⚡ Энергия</span>
+      <span id="energy-text">1000 / 1000</span>
+    </div>
+    <div class="energy-track"><div class="energy-fill" id="energy-fill" style="width:100%"></div></div>
+  </div>
+
+  <!-- Income row -->
+  <div class="income-row">
+    <div class="income-item">⚔️ Тап: <span id="tap-power">1</span></div>
+    <div class="income-item">💰 Доход: <span id="idle-income">0</span>/с</div>
+  </div>
+
+  <!-- Coin -->
+  <div class="coin-area">
+    <button class="coin-btn" id="coin-btn">🪙</button>
+    <div class="coin-hint">Нажми для монет</div>
+  </div>
+
+  <!-- Upgrades -->
+  <div class="section">
+    <div class="section-title">Прокачка</div>
+    <div class="upgrade-row">
+      <div class="upgrade-card">
+        <div class="upgrade-name">⚔️ Сила тапа</div>
+        <div class="upgrade-cost">🪙 <span id="tap-upgrade-cost">500</span></div>
+        <button class="btn-buy" id="btn-tap-upgrade" onclick="buyUpgrade('tap')">Купить</button>
+      </div>
+      <div class="upgrade-card">
+        <div class="upgrade-name">💰 Доход +1/с</div>
+        <div class="upgrade-cost">🪙 <span id="idle-upgrade-cost">800</span></div>
+        <button class="btn-buy" id="btn-idle-upgrade" onclick="buyUpgrade('idle')">Купить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bonus -->
+  <button class="btn-bonus" id="btn-bonus" onclick="claimBonus()">🎁 Забрать бонус</button>
+
+  <!-- Shop -->
+  <div class="section">
+    <div class="section-title">Магазин</div>
+    <div class="shop-tabs">
+      <div class="shop-tab active" onclick="switchShopTab('ton', this)">TON</div>
+      <div class="shop-tab" onclick="switchShopTab('stars', this)">⭐ Stars</div>
+      <div class="shop-tab" onclick="switchShopTab('boosts', this)">🚀 Бусты</div>
+    </div>
+
+    <!-- TON packages -->
+    <div id="shop-ton" class="shop-grid">
+      <div class="shop-card">
+        <div class="coins-amount">1,000</div>
+        <div class="price">0.1 TON</div>
+        <button class="btn-shop" onclick="buyTon('ton_1000')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">5,500</div>
+        <div class="price">0.5 TON</div>
+        <button class="btn-shop" onclick="buyTon('ton_5500')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">12,000</div>
+        <div class="price">1 TON</div>
+        <button class="btn-shop" onclick="buyTon('ton_12000')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">65,000</div>
+        <div class="price">5 TON</div>
+        <button class="btn-shop" onclick="buyTon('ton_65000')">Купить</button>
+      </div>
+    </div>
+
+    <!-- Stars packages -->
+    <div id="shop-stars" class="shop-grid hidden">
+      <div class="shop-card">
+        <div class="coins-amount">1,000</div>
+        <div class="price">⭐ 100</div>
+        <button class="btn-shop" onclick="buyStars('stars_100')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">2,750</div>
+        <div class="price">⭐ 250</div>
+        <button class="btn-shop" onclick="buyStars('stars_250')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">6,000</div>
+        <div class="price">⭐ 500</div>
+        <button class="btn-shop" onclick="buyStars('stars_500')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount">13,000</div>
+        <div class="price">⭐ 1000</div>
+        <button class="btn-shop" onclick="buyStars('stars_1000')">Купить</button>
+      </div>
+    </div>
+
+    <!-- Boosts -->
+    <div id="shop-boosts" class="shop-grid hidden">
+      <div class="shop-card">
+        <div class="coins-amount" style="font-size:15px">⚔️ Тап x2</div>
+        <div class="price">🪙 5,000</div>
+        <button class="btn-shop" onclick="buyBoost('tap_x2')">Купить</button>
+      </div>
+      <div class="shop-card">
+        <div class="coins-amount" style="font-size:15px">💰 Доход x2</div>
+        <div class="price">🪙 8,000</div>
+        <button class="btn-shop" onclick="buyBoost('idle_x2')">Купить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: TASKS -->
+<div class="tab-content" id="tab-tasks">
+  <div style="padding:16px">
+    <div style="font-size:20px;font-weight:800;margin-bottom:16px">📋 Задания</div>
+    <div id="tasks-list"></div>
+  </div>
+</div>
+
+<!-- TAB: TOURNAMENT -->
+<div class="tab-content" id="tab-tournament">
+  <div style="padding:16px">
+    <div style="font-size:20px;font-weight:800;margin-bottom:16px">🏆 Турнир</div>
+    <div id="tournament-content">
+      <div style="text-align:center;color:#9ca3af;padding:40px">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: FRIENDS -->
+<div class="tab-content" id="tab-friends">
+  <div style="padding:16px">
+    <div style="font-size:20px;font-weight:800;margin-bottom:16px">👥 Друзья</div>
+    <div class="referral-box">
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">Твоя реферальная ссылка</div>
+      <div class="referral-link" id="referral-link">Загрузка...</div>
+      <button class="btn-copy" onclick="copyReferral()">📋 Скопировать ссылку</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:14px;color:#9ca3af">Заработано с друзей:</span>
+      <span class="earned-badge">🪙 <span id="referral-earned">0</span></span>
+    </div>
+    <div id="friends-list"></div>
+  </div>
+</div>
+
+<!-- TAB: MORE -->
+<div class="tab-content" id="tab-more">
+  <div style="padding:16px">
+    <div style="font-size:20px;font-weight:800;margin-bottom:16px">⚙️ Ещё</div>
+
+    <!-- Promo -->
+    <div class="more-card">
+      <div class="more-title">🎟️ Промокод</div>
+      <div class="promo-row">
+        <input class="promo-input" id="promo-input" placeholder="Введи промокод" maxlength="20">
+        <button class="btn-promo" onclick="redeemPromo()">Применить</button>
+      </div>
+    </div>
+
+    <!-- Admin panel (hidden by default) -->
+    <div id="admin-panel" class="hidden">
+      <div style="font-size:16px;font-weight:800;color:#c4b5fd;margin-bottom:12px">👑 Админ-панель</div>
+
+      <div class="admin-section">
+        <div class="admin-title">📊 Статистика</div>
+        <div id="admin-stats" style="font-size:13px;color:#d1d5db;line-height:1.8"></div>
+        <button class="btn-admin" onclick="loadAdminStats()" style="margin-top:8px">Обновить</button>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-title">🎟️ Промокоды</div>
+        <input class="admin-input" id="admin-promo-code" placeholder="Код (напр. PROMO2026)">
+        <input class="admin-input" id="admin-promo-coins" placeholder="Монеты" type="number">
+        <input class="admin-input" id="admin-promo-tp" placeholder="TP" type="number">
+        <input class="admin-input" id="admin-promo-uses" placeholder="Макс. использований" type="number" value="100">
+        <button class="btn-admin" onclick="adminCreatePromo()">Создать промокод</button>
+        <div id="admin-promos-list" style="margin-top:10px"></div>
+        <button class="btn-admin" onclick="loadAdminPromos()" style="margin-top:6px;background:#374151">Загрузить список</button>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-title">💰 Начислить монеты</div>
+        <input class="admin-input" id="admin-give-uid" placeholder="User ID">
+        <input class="admin-input" id="admin-give-coins" placeholder="Монеты" type="number">
+        <input class="admin-input" id="admin-give-tp" placeholder="TP" type="number">
+        <button class="btn-admin" onclick="adminGiveCoins()">Начислить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <div class="nav-item active" onclick="switchTab('upgrades', this)">
+    <span class="nav-icon">⚡</span>
+    <span>Прокачка</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('tasks', this)">
+    <span class="nav-icon">📋</span>
+    <span>Задания</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('tournament', this)">
+    <span class="nav-icon">🏆</span>
+    <span>Турнир</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('friends', this)">
+    <span class="nav-icon">👥</span>
+    <span>Друзья</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('more', this)">
+    <span class="nav-icon">⚙️</span>
+    <span>Ещё</span>
+  </div>
+</nav>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const state = {
+  coins: 0, tp: 0, coinsPerTap: 1, idlePerSec: 0,
+  energy: 1000, maxEnergy: 1000,
+  tapUpgradeCost: 500, idleUpgradeCost: 800,
+  referralLink: '', isAdmin: false,
+  tasks: [], friends: []
+};
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const initData = tg?.initData || '';
+    const startParam = tg?.initDataUnsafe?.start_param || '';
+    const ref = startParam.startsWith('ref_') ? startParam.replace('ref_', '') : '';
+    const res = await fetch('/api/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData },
+      body: JSON.stringify({ ref })
+    });
+    const data = await res.json();
+    if (!data.success) return;
+    state.coins = data.user.coins;
+    state.tp = data.user.tp;
+    state.coinsPerTap = data.user.coinsPerTap || 1;
+    state.idlePerSec = data.user.idlePerSec || 0;
+    state.referralLink = data.referralLink || '';
+    state.isAdmin = data.isAdmin || false;
+    state.tasks = data.tasks || [];
+    updateUI();
+    if (data.referralLink) document.getElementById('referral-link').textContent = data.referralLink;
+    if (data.referralEarned) document.getElementById('referral-earned').textContent = data.referralEarned.toLocaleString();
+    if (state.isAdmin) document.getElementById('admin-panel').classList.remove('hidden');
+    renderTasks();
+    if (data.user.idleEarned > 0) showToast(`💰 Пока тебя не было: +${data.user.idleEarned.toLocaleString()} монет`);
+  } catch (e) { console.error('Init error:', e); }
+}
+
+function updateUI() {
+  document.getElementById('coins-display').textContent = state.coins.toLocaleString();
+  document.getElementById('tp-display').textContent = state.tp.toLocaleString();
+  document.getElementById('tap-power').textContent = state.coinsPerTap;
+  document.getElementById('idle-income').textContent = state.idlePerSec.toFixed(1);
+  document.getElementById('tap-upgrade-cost').textContent = state.tapUpgradeCost.toLocaleString();
+  document.getElementById('idle-upgrade-cost').textContent = state.idleUpgradeCost.toLocaleString();
+  const energyPct = (state.energy / state.maxEnergy * 100).toFixed(0);
+  document.getElementById('energy-fill').style.width = energyPct + '%';
+  document.getElementById('energy-text').textContent = `${state.energy} / ${state.maxEnergy}`;
+}
+
+// ── TAP ───────────────────────────────────────────────────────────────────
+let tapBuffer = 0;
+let tapTimer = null;
+
+document.getElementById('coin-btn').addEventListener('click', function(e) {
+  if (state.energy <= 0) { showToast('⚡ Нет энергии!'); return; }
+  state.coins += state.coinsPerTap;
+  state.tp += 1;
+  state.energy = Math.max(0, state.energy - 1);
+  tapBuffer++;
+  updateUI();
+  spawnFloatCoin(e.clientX, e.clientY);
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(sendTaps, 500);
+});
+
+async function sendTaps() {
+  if (tapBuffer <= 0) return;
+  const taps = tapBuffer;
+  tapBuffer = 0;
+  try {
+    const res = await fetch('/api/tap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      body: JSON.stringify({ taps })
+    });
+    const data = await res.json();
+    if (data.success) { state.coins = data.coins; state.tp = data.tp; updateUI(); }
+  } catch (e) {}
+}
+
+function spawnFloatCoin(x, y) {
+  const el = document.createElement('div');
+  el.className = 'float-coin';
+  el.textContent = `+${state.coinsPerTap}`;
+  el.style.left = (x - 20) + 'px';
+  el.style.top = (y - 20) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+// Energy regen
+setInterval(() => {
+  if (state.energy < state.maxEnergy) {
+    state.energy = Math.min(state.maxEnergy, state.energy + 1);
+    updateUI();
+  }
+}, 1000);
+
+// Idle income
+setInterval(() => {
+  if (state.idlePerSec > 0) {
+    state.coins += state.idlePerSec;
+    updateUI();
+  }
+}, 1000);
+
+// ── UPGRADES ──────────────────────────────────────────────────────────────
+async function buyUpgrade(type) {
+  const cost = type === 'tap' ? state.tapUpgradeCost : state.idleUpgradeCost;
+  if (state.coins < cost) { showToast('❌ Недостаточно монет'); return; }
+  state.coins -= cost;
+  if (type === 'tap') { state.coinsPerTap++; state.tapUpgradeCost = Math.floor(state.tapUpgradeCost * 1.5); }
+  else { state.idlePerSec += 1; state.idleUpgradeCost = Math.floor(state.idleUpgradeCost * 1.5); }
+  updateUI();
+  showToast('✅ Прокачано!');
+}
+
+// ── BONUS ─────────────────────────────────────────────────────────────────
+let lastBonus = 0;
+function claimBonus() {
+  const now = Date.now();
+  if (now - lastBonus < 3600000) { showToast('⏳ Бонус уже получен. Приходи через час!'); return; }
+  lastBonus = now;
+  const bonus = 100 + Math.floor(Math.random() * 400);
+  state.coins += bonus;
+  updateUI();
+  showToast(`🎁 Получено ${bonus} монет!`);
+}
+
+// ── SHOP ──────────────────────────────────────────────────────────────────
+function switchShopTab(tab, el) {
+  document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('shop-ton').classList.add('hidden');
+  document.getElementById('shop-stars').classList.add('hidden');
+  document.getElementById('shop-boosts').classList.add('hidden');
+  document.getElementById('shop-' + tab).classList.remove('hidden');
+}
+
+async function buyStars(packageId) {
+  try {
+    const res = await fetch('/api/stars-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      body: JSON.stringify({ packageId })
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
+    if (tg && data.invoiceLink) {
+      tg.openInvoice(data.invoiceLink, async (status) => {
+        if (status === 'paid') {
+          showToast('✅ Оплата прошла! Монеты зачислены.');
+          await init();
+        }
+      });
+    }
+  } catch (e) { showToast('❌ Ошибка соединения'); }
+}
+
+function buyTon(packageId) { showToast('🔜 TON-оплата скоро будет доступна'); }
+
+async function buyBoost(boostType) {
+  try {
+    const res = await fetch('/api/buy-boost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      body: JSON.stringify({ boostType })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.coins = data.coins;
+      if (data.coins_per_tap) state.coinsPerTap = data.coins_per_tap;
+      if (data.idle_per_sec) state.idlePerSec = data.idle_per_sec;
+      updateUI();
+      showToast('🚀 Буст активирован!');
+    } else { showToast('❌ ' + (data.error || 'Ошибка')); }
+  } catch (e) { showToast('❌ Ошибка соединения'); }
+}
+
+// ── TASKS ─────────────────────────────────────────────────────────────────
+function renderTasks() {
+  const list = document.getElementById('tasks-list');
+  if (!state.tasks.length) { list.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:40px">Нет заданий</div>'; return; }
+  const icons = { tap: '⚔️', referral: '👥', level: '⭐', default: '📋' };
+  list.innerHTML = state.tasks.map(t => {
+    const pct = t.target_value > 0 ? Math.min(100, (t.progress / t.target_value) * 100) : 0;
+    const icon = icons[t.type] || icons.default;
+    const btnText = t.claimed ? 'Получено' : t.completed ? 'Забрать' : 'В процессе';
+    const btnClass = t.claimed ? 'claimed' : '';
+    const btnDisabled = t.claimed || !t.completed ? 'disabled' : '';
+    return `<div class="task-card">
+      <div class="task-icon">${icon}</div>
+      <div class="task-info">
+        <div class="task-title">${t.title}</div>
+        <div class="task-desc">${t.description || ''}</div>
+        <div class="task-progress"><div class="task-progress-fill" style="width:${pct}%"></div></div>
+        <div class="task-reward">🪙 ${t.reward_coins} · 🏆 ${t.reward_tp} TP · ${t.progress}/${t.target_value}</div>
+      </div>
+      <button class="btn-claim ${btnClass}" ${btnDisabled} onclick="claimTask(${t.id})">${btnText}</button>
+    </div>`;
+  }).join('');
+}
+
+async function claimTask(taskId) {
+  try {
+    const res = await fetch('/api/claim-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      body: JSON.stringify({ taskId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.coins = data.coins; state.tp = data.tp;
+      const task = state.tasks.find(t => t.id === taskId);
+      if (task) task.claimed = 1;
+      updateUI(); renderTasks();
+      showToast('🎉 Награда получена!');
+    } else { showToast('❌ ' + (data.error || 'Ошибка')); }
+  } catch (e) { showToast('❌ Ошибка'); }
+}
+
+// ── TOURNAMENT ────────────────────────────────────────────────────────────
+async function loadTournament() {
+  try {
+    const res = await fetch('/api/tournament', {
+      headers: { 'x-telegram-init-data': tg?.initData || '' }
+    });
+    const data = await res.json();
+    const el = document.getElementById('tournament-content');
+    if (!data.success || !data.tournament) {
+      el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:40px">Турнир не найден</div>'; return;
+    }
+    const t = data.tournament;
+    const medals = ['🥇','🥈','🥉'];
+    const topHtml = (t.topPlayers || []).map((p, i) =>
+      `<div class="leader-card">
+        <div class="leader-rank">${medals[i] || (i+1)}</div>
+        <div class="leader-info"><div class="leader-name">${p.first_name || p.username || 'Игрок'}</div><div class="leader-tp">🏆 ${(p.tp||0).toLocaleString()} TP</div></div>
+      </div>`
+    ).join('');
+    const btnText = t.isInTournament ? '✅ Вы в турнире' : `Войти — ${t.entryFee} TON`;
+    const btnClass = t.isInTournament ? 'joined' : '';
+    const btnDisabled = t.isInTournament ? 'disabled' : '';
+    el.innerHTML = `
+      <div class="tournament-card">
+        <div class="tournament-title">🏆 ${t.title}</div>
+        <div class="prize-pool">
+          <div class="prize-amount">${t.prizePool} TON</div>
+          <div class="prize-label">Призовой фонд</div>
+        </div>
+        <div class="tournament-info">
+          <div class="t-info-item"><div class="t-info-value">${t.playersCount}</div><div class="t-info-label">Игроков</div></div>
+          <div class="t-info-item"><div class="t-info-value">${t.entryFee} TON</div><div class="t-info-label">Взнос</div></div>
+          <div class="t-info-item"><div class="t-info-value">${t.prizePoolPercent}%</div><div class="t-info-label">В приз</div></div>
+        </div>
+        <div class="tournament-split">80% — победителям · 20% — платформе</div>
+        <button class="btn-tournament ${btnClass}" ${btnDisabled} onclick="joinTournament()">${btnText}</button>
+      </div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px">Топ игроков</div>
+      ${topHtml || '<div style="color:#9ca3af;font-size:13px">Пока никого нет</div>'}
+    `;
+  } catch (e) { document.getElementById('tournament-content').innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px">Ошибка загрузки</div>'; }
+}
+
+async function joinTournament() {
+  try {
+    const res = await fetch('/api/tournament-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' }
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
+    if (tg && data.invoiceUrl) tg.openLink(data.invoiceUrl);
+    else showToast('🔗 Открой ссылку для оплаты');
+  } catch (e) { showToast('❌ Ошибка'); }
+}
+
+// ── FRIENDS ───────────────────────────────────────────────────────────────
+async function loadFriends() {
+  try {
+    const res = await fetch('/api/referrals', { headers: { 'x-telegram-init-data': tg?.initData || '' } });
+    const data = await res.json();
+    if (!data.success) return;
+    if (data.referralLink) {
+      document.getElementById('referral-link').textContent = data.referralLink;
+      state.referralLink = data.referralLink;
+    }
+    if (data.referralEarned !== undefined) document.getElementById('referral-earned').textContent = data.referralEarned.toLocaleString();
+    const list = document.getElementById('friends-list');
+    if (!data.referrals?.length) { list.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:20px">Пока нет друзей. Пригласи первого!</div>'; return; }
+    list.innerHTML = data.referrals.map(f =>
+      `<div class="friend-card">
+        <div class="friend-avatar">${(f.first_name||'?')[0]}</div>
+        <div class="friend-info"><div class="friend-name">${f.first_name || f.username || 'Игрок'}</div><div class="friend-coins">🪙 ${(f.coins||0).toLocaleString()}</div></div>
+      </div>`
+    ).join('');
+  } catch (e) {}
+}
+
+function copyReferral() {
+  const link = state.referralLink || document.getElementById('referral-link').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => showToast('✅ Ссылка скопирована!'));
+  else { const el = document.createElement('textarea'); el.value = link; document.body.appendChild(el); el.select(); document.execCommand('copy'); el.remove(); showToast('✅ Ссылка скопирована!'); }
+}
+
+// ── PROMO ─────────────────────────────────────────────────────────────────
+async function redeemPromo() {
+  const code = document.getElementById('promo-input').value.trim();
+  if (!code) { showToast('Введи промокод'); return; }
+  try {
+    const res = await fetch('/api/redeem-promo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '' },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.coins = data.coins; state.tp = data.tp; updateUI();
+      showToast(`🎉 +${data.reward.coins} монет, +${data.reward.tp} TP!`);
+      document.getElementById('promo-input').value = '';
+    } else { showToast('❌ ' + (data.error || 'Ошибка')); }
+  } catch (e) { showToast('❌ Ошибка'); }
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────
+async function loadAdminStats() {
+  try {
+    const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('admin-stats').innerHTML =
+        `👥 Игроков: ${data.totalUsers}<br>🪙 Монет: ${(data.totalCoins||0).toLocaleString()}<br>🏆 TP: ${(data.totalTp||0).toLocaleString()}<br>💳 Платежей: ${data.totalPayments}`;
+    }
+  } catch (e) {}
+}
+
+async function loadAdminPromos() {
+  try {
+    const res = await fetch('/api/admin/list-promos', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' } });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('admin-promos-list').innerHTML = data.promos.map(p =>
+        `<div class="promo-list-item"><span>${p.code}</span><span style="color:#9ca3af">${p.uses}/${p.max_uses} · 🪙${p.reward_coins}</span></div>`
+      ).join('') || '<div style="color:#9ca3af;font-size:13px">Нет промокодов</div>';
+    }
+  } catch (e) {}
+}
+
+async function adminCreatePromo() {
+  const code = document.getElementById('admin-promo-code').value.trim();
+  const coins = parseInt(document.getElementById('admin-promo-coins').value) || 0;
+  const tp = parseInt(document.getElementById('admin-promo-tp').value) || 0;
+  const maxUses = parseInt(document.getElementById('admin-promo-uses').value) || 100;
+  if (!code) { showToast('Введи код'); return; }
+  try {
+    const res = await fetch('/api/admin/promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      body: JSON.stringify({ action: 'create', code, rewardCoins: coins, rewardTp: tp, maxUses })
+    });
+    const data = await res.json();
+    if (data.success) { showToast('✅ Промокод создан'); loadAdminPromos(); }
+    else showToast('❌ ' + (data.error || 'Ошибка'));
+  } catch (e) { showToast('❌ Ошибка'); }
+}
+
+async function adminGiveCoins() {
+  const userId = document.getElementById('admin-give-uid').value.trim();
+  const coins = parseInt(document.getElementById('admin-give-coins').value) || 0;
+  const tp = parseInt(document.getElementById('admin-give-tp').value) || 0;
+  if (!userId) { showToast('Введи User ID'); return; }
+  try {
+    const res = await fetch('/api/admin/give-coins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': tg?.initDataUnsafe?.user?.id || '' },
+      body: JSON.stringify({ userId, coins, tp })
+    });
+    const data = await res.json();
+    if (data.success) showToast('✅ Начислено!');
+    else showToast('❌ ' + (data.error || 'Ошибка'));
+  } catch (e) { showToast('❌ Ошибка'); }
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  el.classList.add('active');
+  if (tab === 'tournament') loadTournament();
+  if (tab === 'friends') loadFriends();
+  if (tab === 'more' && state.isAdmin) loadAdminStats();
+}
+
+// ── SWIPE ─────────────────────────────────────────────────────────────────
+const tabs = ['upgrades', 'tasks', 'tournament', 'friends', 'more'];
+let touchStartX = 0, touchStartY = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+  if (Math.abs(dx) < 50 || dy > 80) return;
+  const activeTab = document.querySelector('.tab-content.active')?.id?.replace('tab-', '');
+  const idx = tabs.indexOf(activeTab);
+  if (dx < 0 && idx < tabs.length - 1) switchTab(tabs[idx + 1], document.querySelectorAll('.nav-item')[idx + 1]);
+  if (dx > 0 && idx > 0) switchTab(tabs[idx - 1], document.querySelectorAll('.nav-item')[idx - 1]);
+}, { passive: true });
+
+// ── TOAST ─────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── START ─────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
