@@ -29,7 +29,7 @@ const STARS_PACKAGES = [
   { id: 'stars_1000', stars: 1000, coins: 13000, label: '13,000 монет' },
 ];
 
-const DB_PATH = process.env.DB_PATH || './data/bank.db';
+const DB_PATH = process.env.DB_PATH || '/app/data/bank.db';
 const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
