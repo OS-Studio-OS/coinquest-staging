@@ -413,7 +413,7 @@ async function init() {
     });
     dbg('📡 /api/init status=' + res.status);
     const data = await res.json();
-    dbg('📦 data.success=' + data.success + (data.error ? ' err=' + data.error : '') + ' tasks=' + (data.tasks ? data.tasks.length : 'none'));
+    dbg('📦 success=' + data.success + (data.error ? ' err=' + data.error : '') + ' tasks=' + (data.tasks ? data.tasks.length : 'none') + ' isAdmin=' + data.isAdmin + ' serverUserId=' + (data.user ? data.user.id : 'none'));
     if (!data.success) { dbg('❌ STOP: success=false'); return; }
     state.coins = data.user.coins;
     state.tp = data.user.tp;
