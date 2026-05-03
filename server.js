@@ -628,6 +628,21 @@ app.get('/api/check-webhook', async (req, res) => {
     const tgWebhook = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
     res.json({ success: true, telegramWebhook: tgWebhook.data.result, serverUrl: SERVER_URL, cryptoApiUrl: CRYPTO_API_URL });
   } catch (e) { res.status(500).json({ error: e.message }); }
+// TEMP DEBUG: создать тестовый турнир без авторизации
+app.post('/api/admin/init-tournament', (req, res) => {
+  try {
+    const existing = db.prepare("SELECT id FROM tournaments WHERE status = 'active'").get();
+    if (existing) return res.json({ success: true, message: 'Турнир уже существует', id: existing.id });
+    const now = Math.floor(Date.now() / 1000);
+    const endAt = now + 7 * 24 * 3600;
+    const result = db.prepare(
+      "INSERT INTO tournaments (title, status, entry_fee, prize_pool, starts_at, ends_at) VALUES (?, 'active', 0.5, 0, ?, ?)"
+    ).run('CoinQuest Tournament #1', now, endAt);
+    res.json({ success: true, message: 'Турнир создан', id: result.lastInsertRowid });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 });
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
