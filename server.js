@@ -150,15 +150,26 @@ if (taskCount.c === 0) {
   `);
 }
 
-// Миграции — добавляем колонки если их нет (для существующих БД)
+// Миграции — добавляем все недостающие колонки (для существующих БД)
 const existingCols = db.pragma('table_info(users)').map(c => c.name);
-if (!existingCols.includes('username')) {
-  db.exec('ALTER TABLE users ADD COLUMN username TEXT');
-  console.log('Migration: added username column to users');
-}
-if (!existingCols.includes('referral_earnings')) {
-  db.exec('ALTER TABLE users ADD COLUMN referral_earnings INTEGER DEFAULT 0');
-  console.log('Migration: added referral_earnings column to users');
+const usersMigrations = [
+  ['username',          'TEXT'],
+  ['first_name',        'TEXT'],
+  ['coins',             'INTEGER DEFAULT 0'],
+  ['tp',                'INTEGER DEFAULT 0'],
+  ['level',             'INTEGER DEFAULT 1'],
+  ['coins_per_tap',     'INTEGER DEFAULT 1'],
+  ['idle_per_sec',      'REAL DEFAULT 0'],
+  ['last_seen',         'INTEGER DEFAULT 0'],
+  ['referral_code',     'TEXT'],
+  ['referred_by',       'INTEGER'],
+  ['referral_earnings', 'INTEGER DEFAULT 0'],
+];
+for (const [col, type] of usersMigrations) {
+  if (!existingCols.includes(col)) {
+    db.exec('ALTER TABLE users ADD COLUMN ' + col + ' ' + type);
+    console.log('Migration: added column ' + col + ' to users');
+  }
 }
 
 const promoCount = db.prepare('SELECT COUNT(*) as c FROM promos').get();
