@@ -402,15 +402,19 @@ const state = {
 async function init() {
   try {
     const initData = tg?.initData || '';
+    const userId = String(tg?.initDataUnsafe?.user?.id || '');
     const startParam = tg?.initDataUnsafe?.start_param || '';
     const ref = startParam.startsWith('ref_') ? startParam.replace('ref_', '') : '';
+    dbg('🚀 init start, userId=' + userId + ', initData=' + (initData ? initData.length + 'chars' : 'EMPTY'));
     const res = await fetch('/api/init', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData, 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData, 'x-user-id': userId },
       body: JSON.stringify({ ref })
     });
+    dbg('📡 /api/init status=' + res.status);
     const data = await res.json();
-    if (!data.success) return;
+    dbg('📦 data.success=' + data.success + (data.error ? ' err=' + data.error : '') + ' tasks=' + (data.tasks ? data.tasks.length : 'none'));
+    if (!data.success) { dbg('❌ STOP: success=false'); return; }
     state.coins = data.user.coins;
     state.tp = data.user.tp;
     state.coinsPerTap = data.user.coinsPerTap || 1;
@@ -801,6 +805,15 @@ document.addEventListener('touchend', e => {
 
 // ── TOAST ─────────────────────────────────────────────────────────────────
 let toastTimer;
+
+function dbg(msg) {
+  const p = document.getElementById('debug-panel');
+  if (!p) return;
+  p.style.display = 'block';
+  p.innerHTML += '<div>' + new Date().toISOString().substr(11,8) + ' ' + msg + '</div>';
+  p.scrollTop = p.scrollHeight;
+}
+
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
@@ -811,5 +824,7 @@ function showToast(msg) {
 // ── START ─────────────────────────────────────────────────────────────────
 init();
 </script>
+
+<div id="debug-panel" style="position:fixed;bottom:60px;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;padding:8px;z-index:9999;max-height:200px;overflow-y:auto;font-family:monospace;display:none"></div>
 </body>
 </html>
