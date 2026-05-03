@@ -406,7 +406,7 @@ async function init() {
     const ref = startParam.startsWith('ref_') ? startParam.replace('ref_', '') : '';
     const res = await fetch('/api/init', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData, 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
       body: JSON.stringify({ ref })
     });
     const data = await res.json();
