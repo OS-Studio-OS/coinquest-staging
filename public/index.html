@@ -634,8 +634,9 @@ async function claimTask(taskId) {
 // ── TOURNAMENT ────────────────────────────────────────────────────────────
 async function loadTournament() {
   try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/tournament', {
-      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid }
     });
     const data = await res.json();
     const el = document.getElementById('tournament-content');
@@ -666,12 +667,37 @@ async function loadTournament() {
           <div class="t-info-item"><div class="t-info-value">${t.prizePoolPercent}%</div><div class="t-info-label">В приз</div></div>
         </div>
         <div class="tournament-split">80% — победителям · 20% — платформе</div>
+        <div class="tournament-timer" id="tournament-timer" style="text-align:center;margin:10px 0;font-size:14px;color:#a78bfa">⏱ Загрузка...</div>
         <button class="btn-tournament ${btnClass}" ${btnDisabled} onclick="joinTournament()">${btnText}</button>
       </div>
       <div style="font-size:15px;font-weight:700;margin-bottom:8px">Топ игроков</div>
       ${topHtml || '<div style="color:#9ca3af;font-size:13px">Пока никого нет</div>'}
     `;
+    startTournamentTimer(t.ends_at);
   } catch (e) { document.getElementById('tournament-content').innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px">Ошибка загрузки</div>'; }
+}
+
+function startTournamentTimer(endsAt) {
+  const el = document.getElementById('tournament-timer');
+  if (!el) return;
+  if (window._tournamentTimerInterval) clearInterval(window._tournamentTimerInterval);
+  function update() {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = endsAt - now;
+    if (diff <= 0) { el.textContent = '⏱ Турнир завершён'; clearInterval(window._tournamentTimerInterval); return; }
+    const d = Math.floor(diff / 86400);
+    const h = Math.floor((diff % 86400) / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    const parts = [];
+    if (d > 0) parts.push(d + 'д');
+    parts.push(String(h).padStart(2,'0') + 'ч');
+    parts.push(String(m).padStart(2,'0') + 'м');
+    parts.push(String(s).padStart(2,'0') + 'с');
+    el.textContent = '⏱ До конца: ' + parts.join(' ');
+  }
+  update();
+  window._tournamentTimerInterval = setInterval(update, 1000);
 }
 
 async function joinTournament() {
