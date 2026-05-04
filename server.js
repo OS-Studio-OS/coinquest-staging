@@ -513,7 +513,6 @@ app.post('/api/tournament-confirm', async (req, res) => {
     }
     res.json({ success: true, status: 'confirmed' });
   } catch (e) { console.error('/api/tournament-confirm error:', e); res.status(500).json({ error: e.message }); }
-}); }
 });
 
 app.post('/api/stars-invoice', async (req, res) => {
