@@ -702,14 +702,39 @@ function startTournamentTimer(endsAt) {
 
 async function joinTournament() {
   try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/tournament-invoice', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid }
     });
     const data = await res.json();
     if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
-    if (tg && data.invoiceUrl) tg.openLink(data.invoiceUrl);
-    else showToast('🔗 Открой ссылку для оплаты');
+    const invoiceId = data.invoiceId;
+    if (tg && data.invoiceUrl) {
+      tg.openLink(data.invoiceUrl);
+      // Polling: проверяем оплату каждые 3 сек, до 10 попыток
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const cr = await fetch('/api/tournament-confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid },
+            body: JSON.stringify({ invoiceId })
+          });
+          const cd = await cr.json();
+          if (cd.success) {
+            clearInterval(poll);
+            showToast('🏆 Вы в турнире!');
+            setTimeout(() => loadTournament(), 500);
+          } else if (attempts >= 10) {
+            clearInterval(poll);
+          }
+        } catch(e) { if (attempts >= 10) clearInterval(poll); }
+      }, 3000);
+    } else {
+      showToast('🔗 Открой ссылку для оплаты');
+    }
   } catch (e) { showToast('❌ Ошибка'); }
 }
 
