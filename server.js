@@ -628,17 +628,41 @@ app.get('/api/check-webhook', async (req, res) => {
     const tgWebhook = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
     res.json({ success: true, telegramWebhook: tgWebhook.data.result, serverUrl: SERVER_URL, cryptoApiUrl: CRYPTO_API_URL });
   } catch (e) { res.status(500).json({ error: e.message }); }
-// TEMP DEBUG: создать тестовый турнир без авторизации
-app.post('/api/admin/init-tournament', (req, res) => {
+// Получить текущий турнир для админа
+app.get('/api/admin/tournament', requireAdmin, (req, res) => {
+  try {
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    if (!tournament) return res.json({ success: true, tournament: null });
+    const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
+    res.json({ success: true, tournament: { ...tournament, playersCount } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Создать новый турнир (админ)
+app.post('/api/admin/create-tournament', requireAdmin, (req, res) => {
   try {
     const existing = db.prepare("SELECT id FROM tournaments WHERE status = 'active'").get();
-    if (existing) return res.json({ success: true, message: 'Турнир уже существует', id: existing.id });
+    if (existing) return res.status(400).json({ error: 'Уже есть активный турнир. Завершите его сначала.' });
+    const { title, entryFee, durationDays } = req.body;
+    if (!title) return res.status(400).json({ error: 'Укажите название турнира' });
+    const fee = parseFloat(entryFee) || 0.5;
+    const days = parseInt(durationDays) || 7;
     const now = Math.floor(Date.now() / 1000);
-    const endAt = now + 7 * 24 * 3600;
+    const endAt = now + days * 24 * 3600;
     const result = db.prepare(
-      "INSERT INTO tournaments (title, status, entry_fee, prize_pool, starts_at, ends_at) VALUES (?, 'active', 0.5, 0, ?, ?)"
-    ).run('CoinQuest Tournament #1', now, endAt);
+      "INSERT INTO tournaments (title, status, entry_fee, prize_pool, starts_at, ends_at) VALUES (?, 'active', ?, 0, ?, ?)"
+    ).run(title, fee, now, endAt);
     res.json({ success: true, message: 'Турнир создан', id: result.lastInsertRowid });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Завершить активный турнир (админ)
+app.post('/api/admin/end-tournament', requireAdmin, (req, res) => {
+  try {
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    if (!tournament) return res.status(404).json({ error: 'Нет активного турнира' });
+    db.prepare("UPDATE tournaments SET status = 'finished' WHERE id = ?").run(tournament.id);
+    res.json({ success: true, message: 'Турнир завершён' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
