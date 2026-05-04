@@ -172,6 +172,20 @@ for (const [col, type] of usersMigrations) {
   }
 }
 
+// Миграции tournament_entries
+const teCols = db.pragma('table_info(tournament_entries)').map(c => c.name);
+const teMigrations = [
+  ['paid_amount',  'REAL DEFAULT 0'],
+  ['payment_id',   'TEXT'],
+  ['tp_at_entry',  'INTEGER DEFAULT 0'],
+];
+for (const [col, type] of teMigrations) {
+  if (!teCols.includes(col)) {
+    db.exec('ALTER TABLE tournament_entries ADD COLUMN ' + col + ' ' + type);
+    console.log('Migration: added column ' + col + ' to tournament_entries');
+  }
+}
+
 const promoCount = db.prepare('SELECT COUNT(*) as c FROM promos').get();
 if (promoCount.c === 0) {
   db.exec(`
@@ -453,8 +467,53 @@ app.post('/api/tournament-invoice', async (req, res) => {
       payload: JSON.stringify({ type: 'tournament_entry', userId: tgUser.id, tournamentId: tournament.id }),
       allow_comments: false, allow_anonymous: false
     }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
-    res.json({ success: true, invoiceUrl: response.data.result.pay_url });
+    const inv = response.data.result;
+    res.json({ success: true, invoiceUrl: inv.pay_url, invoiceId: inv.invoice_id });
   } catch (e) { console.error('/api/tournament-invoice error:', e); res.status(500).json({ error: e.message }); }
+});
+
+// Ручное подтверждение оплаты турнира (polling после оплаты)
+app.post('/api/tournament-confirm', async (req, res) => {
+  try {
+    const tgUser = getUserFromRequest(req);
+    if (!tgUser) return res.status(401).json({ error: 'Unauthorized' });
+    const { invoiceId } = req.body;
+    if (!invoiceId) return res.status(400).json({ error: 'invoiceId required' });
+    // Проверяем уже в турнире
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    if (!tournament) return res.status(404).json({ error: 'Нет активного турнира' });
+    const alreadyIn = db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournament.id, tgUser.id);
+    if (alreadyIn) return res.json({ success: true, status: 'already_in' });
+    // Запрашиваем статус инвойса у CryptoBot
+    const resp = await axios.get(`${CRYPTO_API_URL}/getInvoices`, {
+      params: { invoice_ids: String(invoiceId) },
+      headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN }
+    });
+    const items = resp.data?.result?.items || [];
+    const invoice = items[0];
+    if (!invoice) return res.json({ success: false, status: 'not_found' });
+    if (invoice.status !== 'paid') return res.json({ success: false, status: invoice.status });
+    // Инвойс оплачен — засчитываем вход
+    let data = {};
+    try { data = JSON.parse(invoice.payload || '{}'); } catch(e) {}
+    if (data.type !== 'tournament_entry' || data.userId != tgUser.id) {
+      return res.status(400).json({ error: 'Неверный инвойс' });
+    }
+    db.prepare('INSERT OR IGNORE INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id) VALUES (?, ?, ?, ?)')
+      .run(tournament.id, tgUser.id, parseFloat(invoice.amount), String(invoice.invoice_id));
+    db.prepare('UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?')
+      .run(parseFloat(invoice.amount) * TOURNAMENT_CONFIG.prizePoolPercent, tournament.id);
+    // Уведомление
+    if (BOT_TOKEN) {
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(tgUser.id);
+      axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        chat_id: tgUser.id,
+        text: `✅ Вы вошли в турнир CoinQuest #${tournament.id}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
+      }).catch(() => {});
+    }
+    res.json({ success: true, status: 'confirmed' });
+  } catch (e) { console.error('/api/tournament-confirm error:', e); res.status(500).json({ error: e.message }); }
+}); }
 });
 
 app.post('/api/stars-invoice', async (req, res) => {
