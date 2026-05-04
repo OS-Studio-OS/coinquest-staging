@@ -408,6 +408,7 @@ const state = {
   energy: 1000, maxEnergy: 1000,
   tapUpgradeCost: 500, idleUpgradeCost: 800,
   referralLink: '', isAdmin: false,
+  serverUserId: '',
   tasks: [], friends: []
 };
 
@@ -434,6 +435,7 @@ async function init() {
     state.idlePerSec = data.user.idlePerSec || 0;
     state.referralLink = data.referralLink || '';
     state.isAdmin = data.isAdmin || false;
+    state.serverUserId = String(data.user?.id || '');
     state.tasks = data.tasks || [];
     updateUI();
     if (data.referralLink) document.getElementById('referral-link').textContent = data.referralLink;
@@ -738,8 +740,9 @@ async function loadAdminTournament() {
   const formEl = document.getElementById('admin-tournament-form');
   const endBtn = document.getElementById('admin-end-tournament-btn');
   try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/admin/tournament', {
-      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid }
     });
     const data = await res.json();
     if (!data.success) { statusEl.textContent = '❌ Ошибка загрузки'; return; }
@@ -763,9 +766,10 @@ async function adminCreateTournament() {
   const durationDays = document.getElementById('admin-t-days').value;
   if (!title) { showToast('Введите название турнира'); return; }
   try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/admin/create-tournament', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid },
       body: JSON.stringify({ title, entryFee, durationDays })
     });
     const data = await res.json();
@@ -778,9 +782,10 @@ async function adminCreateTournament() {
 async function adminEndTournament() {
   if (!confirm('Завершить активный турнир?')) return;
   try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/admin/end-tournament', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid }
     });
     const data = await res.json();
     if (data.error) { showToast('❌ ' + data.error); return; }
@@ -855,7 +860,7 @@ function switchTab(tab, el) {
   el.classList.add('active');
   if (tab === 'tournament') loadTournament();
   if (tab === 'friends') loadFriends();
-  if (tab === 'more' && state.isAdmin) { loadAdminStats(); loadAdminTournament(); }
+  if (tab === 'more' && state.isAdmin) { loadAdminStats(); setTimeout(loadAdminTournament, 300); }
 }
 
 // ── SWIPE ─────────────────────────────────────────────────────────────────
