@@ -434,7 +434,7 @@ app.get('/api/tournament', (req, res) => {
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
     const prizePool = tournament.prize_pool || (playersCount * tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent);
     const isInTournament = !!db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournament.id, tgUser.id);
-    const topPlayers = db.prepare('SELECT u.id, u.username, u.first_name, u.tp, te.created_at FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY u.tp DESC LIMIT 10').all(tournament.id);
+    const topPlayers = db.prepare('SELECT u.id, u.username, u.first_name, u.tp FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY u.tp DESC LIMIT 10').all(tournament.id);
     res.json({ success: true, tournament: { ...tournament, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers } });
   } catch (e) { console.error('/api/tournament error:', e); res.status(500).json({ error: e.message }); }
 });
