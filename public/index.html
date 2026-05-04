@@ -358,6 +358,19 @@
         <input class="admin-input" id="admin-give-tp" placeholder="TP" type="number">
         <button class="btn-admin" onclick="adminGiveCoins()">Начислить</button>
       </div>
+
+      <div class="admin-section">
+        <div class="admin-title">🏆 Турнир</div>
+        <div id="admin-tournament-status" style="font-size:13px;color:#d1d5db;margin-bottom:10px">Загрузка...</div>
+        <div id="admin-tournament-form">
+          <input class="admin-input" id="admin-t-title" placeholder="Название турнира" value="CoinQuest Tournament #1">
+          <input class="admin-input" id="admin-t-fee" placeholder="Взнос (TON)" type="number" step="0.1" value="0.5">
+          <input class="admin-input" id="admin-t-days" placeholder="Длительность (дней)" type="number" value="7">
+          <button class="btn-admin" onclick="adminCreateTournament()">🚀 Создать турнир</button>
+        </div>
+        <button class="btn-admin" id="admin-end-tournament-btn" onclick="adminEndTournament()" style="background:#7f1d1d;display:none;margin-top:6px">⛔ Завершить турнир</button>
+        <button class="btn-admin" onclick="loadAdminTournament()" style="background:#374151;margin-top:6px">🔄 Обновить</button>
+      </div>
     </div>
   </div>
 </div>
@@ -720,7 +733,63 @@ async function redeemPromo() {
 }
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────
-async function loadAdminStats() {
+async function loadAdminTournament() {
+  const statusEl = document.getElementById('admin-tournament-status');
+  const formEl = document.getElementById('admin-tournament-form');
+  const endBtn = document.getElementById('admin-end-tournament-btn');
+  try {
+    const res = await fetch('/api/admin/tournament', {
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+    });
+    const data = await res.json();
+    if (!data.success) { statusEl.textContent = '❌ Ошибка загрузки'; return; }
+    if (!data.tournament) {
+      statusEl.textContent = '⚪ Активного турнира нет';
+      formEl.style.display = 'block';
+      endBtn.style.display = 'none';
+    } else {
+      const t = data.tournament;
+      const endDate = new Date(t.ends_at * 1000).toLocaleDateString('ru-RU');
+      statusEl.innerHTML = `✅ <b>${t.title}</b><br>Игроков: ${t.playersCount} · Взнос: ${t.entry_fee} TON · Призовой фонд: ${t.prize_pool} TON<br>Завершается: ${endDate}`;
+      formEl.style.display = 'none';
+      endBtn.style.display = 'block';
+    }
+  } catch (e) { statusEl.textContent = '❌ ' + e.message; }
+}
+
+async function adminCreateTournament() {
+  const title = document.getElementById('admin-t-title').value.trim();
+  const entryFee = document.getElementById('admin-t-fee').value;
+  const durationDays = document.getElementById('admin-t-days').value;
+  if (!title) { showToast('Введите название турнира'); return; }
+  try {
+    const res = await fetch('/api/admin/create-tournament', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
+      body: JSON.stringify({ title, entryFee, durationDays })
+    });
+    const data = await res.json();
+    if (data.error) { showToast('❌ ' + data.error); return; }
+    showToast('✅ Турнир создан!');
+    loadAdminTournament();
+  } catch (e) { showToast('❌ ' + e.message); }
+}
+
+async function adminEndTournament() {
+  if (!confirm('Завершить активный турнир?')) return;
+  try {
+    const res = await fetch('/api/admin/end-tournament', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+    });
+    const data = await res.json();
+    if (data.error) { showToast('❌ ' + data.error); return; }
+    showToast('✅ Турнир завершён');
+    loadAdminTournament();
+  } catch (e) { showToast('❌ ' + e.message); }
+}
+
+async function loadAdminStats()  {
   try {
     const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') } });
     const data = await res.json();
@@ -786,7 +855,7 @@ function switchTab(tab, el) {
   el.classList.add('active');
   if (tab === 'tournament') loadTournament();
   if (tab === 'friends') loadFriends();
-  if (tab === 'more' && state.isAdmin) loadAdminStats();
+  if (tab === 'more' && state.isAdmin) { loadAdminStats(); loadAdminTournament(); }
 }
 
 // ── SWIPE ─────────────────────────────────────────────────────────────────
