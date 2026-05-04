@@ -629,8 +629,14 @@ app.get('/api/check-webhook', async (req, res) => {
     res.json({ success: true, telegramWebhook: tgWebhook.data.result, serverUrl: SERVER_URL, cryptoApiUrl: CRYPTO_API_URL });
   } catch (e) { res.status(500).json({ error: e.message }); }
 // Получить текущий турнир для админа
-app.get('/api/admin/tournament', requireAdmin, (req, res) => {
+app.get('/api/admin/tournament', (req, res) => {
   try {
+    // Мягкая проверка: только для авторизованных пользователей
+    const user = getUserFromRequest(req);
+    const userId = String(parseInt(user?.id || 0));
+    if (!userId || userId === '0' || !ADMIN_IDS.includes(userId)) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
     const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
     if (!tournament) return res.json({ success: true, tournament: null });
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
