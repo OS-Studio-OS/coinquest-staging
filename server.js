@@ -244,8 +244,8 @@ function getUserFromRequest(req) {
 
 function requireAdmin(req, res, next) {
   const user = getUserFromRequest(req);
-  const userId = user?.id?.toString() || req.body?.userId?.toString() || req.headers['x-user-id'];
-  if (!userId || !ADMIN_IDS.includes(userId)) return res.status(403).json({ error: 'Forbidden' });
+  const userId = String(parseInt(user?.id || req.body?.userId || req.headers['x-user-id'] || 0));
+  if (!userId || userId === '0' || !ADMIN_IDS.includes(userId)) return res.status(403).json({ error: 'Forbidden' });
   req.adminId = userId;
   next();
 }
@@ -311,7 +311,7 @@ app.post('/api/init', (req, res) => {
       user: { id: user.id, username: user.username, firstName: user.first_name, coins: user.coins, tp: user.tp,
         level: user.level, coinsPerTap: user.coins_per_tap, idlePerSec: user.idle_per_sec, idleIncome: user.idle_per_sec, idleEarned },
       tasks: tasksWithProgress, boosts, referralCount, referralLink,
-      referralEarned: user.referral_earnings || 0, isAdmin: ADMIN_IDS.includes(user.id.toString())
+      referralEarned: user.referral_earnings || 0, isAdmin: ADMIN_IDS.includes(String(parseInt(user.id)))
     });
   } catch (e) { console.error('/api/init error:', e); res.status(500).json({ error: e.message }); }
 });
