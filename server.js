@@ -641,12 +641,6 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
 });
 
 
-app.get('/api/check-webhook', requireAdmin, async (req, res) => {
-  try {
-    const r = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
-    res.json({ success: true, webhook: r.data.result });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
 app.get('/api/admin/referrals', requireAdmin, (req, res) => {
   try {

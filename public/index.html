@@ -910,14 +910,13 @@ async function loadAdminReferrals() {
 
 async function checkWebhook() {
   try {
-    const res = await fetch('/api/check-webhook', {
-      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
-    });
+    const res = await fetch('/api/check-webhook');
     const data = await res.json();
     if (!data.success) { showToast('❌ ' + data.error); return; }
-    const wh = data.webhook;
+    const wh = data.telegramWebhook;
     const info = [
-      `URL: ${wh.url ? '✅' : '❌ не задан'}`,
+      `URL: ${wh.url ? '✅ ...' + wh.url.slice(-35) : '❌ не задан'}`,
+      `SERVER_URL: ${data.serverUrl || '❌ не задан'}`,
       `Pending: ${wh.pending_update_count || 0}`,
       `Last error: ${wh.last_error_message || 'нет'}`,
       `Last error date: ${wh.last_error_date ? new Date(wh.last_error_date * 1000).toLocaleString('ru') : 'нет'}`
