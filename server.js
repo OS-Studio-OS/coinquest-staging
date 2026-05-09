@@ -463,7 +463,7 @@ app.post('/api/tournament-invoice', async (req, res) => {
     if (alreadyIn) return res.status(400).json({ error: 'Вы уже в турнире' });
     const response = await axios.post(`${CRYPTO_API_URL}/createInvoice`, {
       asset: 'TON', amount: TOURNAMENT_CONFIG.entryFee.toString(),
-      description: `Вход в турнир CoinQuest #${tournament.id}`,
+      description: `Вход в турнир TapCrown #${tournament.id}`,
       payload: JSON.stringify({ type: 'tournament_entry', userId: tgUser.id, tournamentId: tournament.id }),
       allow_comments: false, allow_anonymous: false
     }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
@@ -508,7 +508,7 @@ app.post('/api/tournament-confirm', async (req, res) => {
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(tgUser.id);
       axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: tgUser.id,
-        text: `✅ Вы вошли в турнир CoinQuest #${tournament.id}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
+        text: `✅ Вы вошли в турнир TapCrown #${tournament.id}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
       }).catch(() => {});
     }
     res.json({ success: true, status: 'confirmed' });
@@ -523,8 +523,8 @@ app.post('/api/stars-invoice', async (req, res) => {
     const pkg = STARS_PACKAGES.find(p => p.id === packageId);
     if (!pkg) return res.status(400).json({ error: 'Unknown package' });
     const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
-      title: `${pkg.label} для CoinQuest`,
-      description: `Получи ${pkg.label} в игре CoinQuest`,
+      title: `${pkg.label} для TapCrown`,
+      description: `Получи ${pkg.label} в игре TapCrown`,
       payload: JSON.stringify({ type: 'stars_purchase', userId: tgUser.id, packageId: pkg.id, coins: pkg.coins }),
       currency: 'XTR',
       prices: [{ label: pkg.label, amount: pkg.stars }]
@@ -603,7 +603,7 @@ app.post('/api/crypto-webhook', (req, res) => {
               const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
               axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 chat_id: userId,
-                text: `✅ Вы вошли в турнир CoinQuest #${tournamentId}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
+                text: `✅ Вы вошли в турнир TapCrown #${tournamentId}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
               }).catch(() => {});
             }
           }
@@ -628,6 +628,33 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   try {
     const users = db.prepare('SELECT id, username, first_name, coins, tp, level, created_at FROM users ORDER BY tp DESC LIMIT 100').all();
     res.json({ success: true, users });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/referrals', requireAdmin, (req, res) => {
+  try {
+    const topReferrers = db.prepare(`
+      SELECT u.id, u.username, u.first_name,
+             COUNT(r.id) as referral_count,
+             COALESCE(u.referral_earnings, 0) as referral_earnings
+      FROM users u
+      LEFT JOIN users r ON r.referred_by = u.id
+      GROUP BY u.id
+      HAVING referral_count > 0
+      ORDER BY referral_count DESC
+      LIMIT 50
+    `).all();
+    const totalReferrals = db.prepare('SELECT COUNT(*) as c FROM users WHERE referred_by IS NOT NULL').get()?.c || 0;
+    const recentReferrals = db.prepare(`
+      SELECT u.id, u.username, u.first_name, u.created_at,
+             r.username as inviter_username, r.first_name as inviter_first_name
+      FROM users u
+      LEFT JOIN users r ON r.id = u.referred_by
+      WHERE u.referred_by IS NOT NULL
+      ORDER BY u.created_at DESC
+      LIMIT 20
+    `).all();
+    res.json({ success: true, topReferrers, totalReferrals, recentReferrals });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -729,7 +756,7 @@ app.post('/api/admin/end-tournament', requireAdmin, (req, res) => {
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 app.listen(PORT, async () => {
-  console.log(`🚀 CoinQuest server running on port ${PORT}`);
+  console.log(`🚀 TapCrown server running on port ${PORT}`);
   if (BOT_TOKEN && SERVER_URL) {
     try {
       const webhookUrl = `${SERVER_URL}/api/telegram-webhook`;

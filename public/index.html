@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<title>CoinQuest</title>
+<title>TapCrown</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { background: #0a0a0f; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; overflow-x: hidden; }
@@ -360,10 +360,17 @@
       </div>
 
       <div class="admin-section">
+        <div class="admin-title">👥 Рефералы</div>
+        <div id="admin-referrals-summary" style="font-size:13px;color:#d1d5db;margin-bottom:8px"></div>
+        <div id="admin-referrals-list" style="font-size:12px;color:#9ca3af;max-height:200px;overflow-y:auto"></div>
+        <button class="btn-admin" onclick="loadAdminReferrals()" style="margin-top:8px">Загрузить</button>
+      </div>
+
+      <div class="admin-section">
         <div class="admin-title">🏆 Турнир</div>
         <div id="admin-tournament-status" style="font-size:13px;color:#d1d5db;margin-bottom:10px">Загрузка...</div>
         <div id="admin-tournament-form">
-          <input class="admin-input" id="admin-t-title" placeholder="Название турнира" value="CoinQuest Tournament #1">
+          <input class="admin-input" id="admin-t-title" placeholder="Название турнира" value="TapCrown Tournament #1">
           <input class="admin-input" id="admin-t-fee" placeholder="Взнос (TON)" type="number" step="0.1" value="0.5">
           <input class="admin-input" id="admin-t-days" placeholder="Длительность (дней)" type="number" value="7">
           <button class="btn-admin" onclick="adminCreateTournament()">🚀 Создать турнир</button>
@@ -373,6 +380,17 @@
       </div>
     </div>
   </div>
+
+    <!-- Legal links -->
+    <div class="more-card" style="margin-top:16px">
+      <div class="more-title">📄 Правовая информация</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <a href="/legal/terms.html" target="_blank" style="color:#a78bfa;font-size:14px;text-decoration:none">📋 Пользовательское соглашение</a>
+        <a href="/legal/privacy.html" target="_blank" style="color:#a78bfa;font-size:14px;text-decoration:none">🔒 Политика конфиденциальности</a>
+      </div>
+      <div style="font-size:11px;color:#6b7280;margin-top:10px">⛔ 13+ | Виртуальная валюта | Без вывода средств</div>
+    </div>
+
 </div>
 
 <!-- BOTTOM NAV -->
@@ -419,16 +437,13 @@ async function init() {
     const userId = String(tg?.initDataUnsafe?.user?.id || '');
     const startParam = tg?.initDataUnsafe?.start_param || '';
     const ref = startParam.startsWith('ref_') ? startParam.replace('ref_', '') : '';
-    dbg('🚀 init start, userId=' + userId + ', initData=' + (initData ? initData.length + 'chars' : 'EMPTY'));
     const res = await fetch('/api/init', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData, 'x-user-id': userId },
       body: JSON.stringify({ ref })
     });
-    dbg('📡 /api/init status=' + res.status);
     const data = await res.json();
-    dbg('📦 success=' + data.success + (data.error ? ' err=' + data.error : '') + ' tasks=' + (data.tasks ? data.tasks.length : 'none') + ' isAdmin=' + data.isAdmin + ' serverUserId=' + (data.user ? data.user.id : 'none'));
-    if (!data.success) { dbg('❌ STOP: success=false'); return; }
+    if (!data.success) { return; }
     state.coins = data.user.coins;
     state.tp = data.user.tp;
     state.coinsPerTap = data.user.coinsPerTap || 1;
@@ -561,7 +576,21 @@ async function buyStars(packageId) {
     if (tg && data.invoiceLink) {
       tg.openInvoice(data.invoiceLink, async (status) => {
         if (status === 'paid') {
-          showToast('✅ Оплата прошла! Монеты зачислены.');
+          try {
+            const confirmRes = await fetch('/api/stars-success', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
+              body: JSON.stringify({ packageId })
+            });
+            const confirmData = await confirmRes.json();
+            if (confirmData.success) {
+              showToast('✅ Оплата прошла! Монеты зачислены.');
+            } else {
+              showToast('✅ Оплата прошла! Монеты будут зачислены в течение минуты.');
+            }
+          } catch (e) {
+            showToast('✅ Оплата прошла! Монеты будут зачислены в течение минуты.');
+          }
           await init();
         }
       });
@@ -845,6 +874,33 @@ async function adminEndTournament() {
   } catch (e) { showToast('❌ ' + e.message); }
 }
 
+
+async function loadAdminReferrals() {
+  try {
+    const res = await fetch('/api/admin/referrals', {
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('❌ Ошибка загрузки рефералов'); return; }
+    document.getElementById('admin-referrals-summary').innerHTML =
+      `Всего рефералов: <b>${data.totalReferrals}</b>`;
+    const list = data.topReferrers.map(u =>
+      `<div style="padding:4px 0;border-bottom:1px solid #1f2937">
+        <b>${u.first_name || u.username || u.id}</b>: ${u.referral_count} реф. / ${u.referral_earnings} монет
+      </div>`
+    ).join('');
+    const recent = data.recentReferrals.map(u =>
+      `<div style="padding:3px 0;color:#6b7280">
+        ${u.first_name || u.username || u.id} ← ${u.inviter_first_name || u.inviter_username || '?'}
+        <span style="float:right">${new Date(u.created_at).toLocaleDateString('ru')}</span>
+      </div>`
+    ).join('');
+    document.getElementById('admin-referrals-list').innerHTML =
+      (list ? '<div style="margin-bottom:8px">' + list + '</div>' : '') +
+      (recent ? '<div style="font-size:11px;color:#6b7280;margin-top:6px">Последние:</div>' + recent : '');
+  } catch (e) { showToast('❌ Ошибка: ' + e.message); }
+}
+
 async function loadAdminStats()  {
   try {
     const res = await fetch('/api/admin/stats', { headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') } });
@@ -931,9 +987,7 @@ document.addEventListener('touchend', e => {
 // ── TOAST ─────────────────────────────────────────────────────────────────
 let toastTimer;
 
-function dbg(msg) {
-  const p = document.getElementById('debug-panel');
-  if (!p) return;
+function  if (!p) return;
   p.style.display = 'block';
   p.innerHTML += '<div>' + new Date().toISOString().substr(11,8) + ' ' + msg + '</div>';
   p.scrollTop = p.scrollHeight;
@@ -950,6 +1004,5 @@ function showToast(msg) {
 init();
 </script>
 
-<div id="debug-panel" style="position:fixed;bottom:60px;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;padding:8px;z-index:9999;max-height:200px;overflow-y:auto;font-family:monospace;display:none"></div>
 </body>
 </html>
