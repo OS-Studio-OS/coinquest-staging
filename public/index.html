@@ -987,11 +987,7 @@ document.addEventListener('touchend', e => {
 // ── TOAST ─────────────────────────────────────────────────────────────────
 let toastTimer;
 
-function  if (!p) return;
-  p.style.display = 'block';
-  p.innerHTML += '<div>' + new Date().toISOString().substr(11,8) + ' ' + msg + '</div>';
-  p.scrollTop = p.scrollHeight;
-}
+
 
 function showToast(msg) {
   const el = document.getElementById('toast');
