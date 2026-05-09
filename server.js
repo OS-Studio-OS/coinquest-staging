@@ -541,8 +541,9 @@ app.post('/api/stars-success', (req, res) => {
     const { packageId, telegramPaymentChargeId } = req.body;
     const pkg = STARS_PACKAGES.find(p => p.id === packageId);
     if (!pkg) return res.status(400).json({ error: 'Unknown package' });
-    if (telegramPaymentChargeId) {
-      const existing = db.prepare('SELECT id FROM payments WHERE external_id = ?').get(telegramPaymentChargeId);
+    const chargeId = telegramPaymentChargeId || null;
+    if (chargeId) {
+      const existing = db.prepare('SELECT id FROM payments WHERE external_id = ?').get(chargeId);
       if (existing) return res.status(400).json({ error: 'Already processed' });
     }
     db.prepare('UPDATE users SET coins = coins + ? WHERE id = ?').run(pkg.coins, tgUser.id);
@@ -567,12 +568,20 @@ app.post('/api/telegram-webhook', async (req, res) => {
       const payload = JSON.parse(payment.invoice_payload || '{}');
       if (payload.type === 'stars_purchase') {
         const pkg = STARS_PACKAGES.find(p => p.id === payload.packageId);
-        if (pkg && payload.userId) {
+        const uid = parseInt(payload.userId);
+        if (pkg && uid) {
           const existing = db.prepare('SELECT id FROM payments WHERE external_id = ?').get(payment.telegram_payment_charge_id);
           if (!existing) {
-            db.prepare('UPDATE users SET coins = coins + ? WHERE id = ?').run(pkg.coins, payload.userId);
+            db.prepare('UPDATE users SET coins = coins + ? WHERE id = ?').run(pkg.coins, uid);
             db.prepare('INSERT INTO payments (user_id, type, amount, currency, payload, status, external_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-              .run(payload.userId, 'stars', payment.total_amount, 'XTR', payment.invoice_payload, 'completed', payment.telegram_payment_charge_id);
+              .run(uid, 'stars', payment.total_amount, 'XTR', payment.invoice_payload, 'completed', payment.telegram_payment_charge_id);
+            const LOGS_CHAT = process.env.LOGS_CHAT_ID || '-1002xxxxxxxxx';
+            if (BOT_TOKEN && LOGS_CHAT) {
+              axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                chat_id: LOGS_CHAT,
+                text: `⭐ Stars payment\nUser: ${uid}\nPackage: ${pkg.label}\nStars: ${payment.total_amount}\nCharge: ${payment.telegram_payment_charge_id}`
+              }).catch(() => {});
+            }
           }
         }
       }
@@ -631,6 +640,14 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+app.get('/api/check-webhook', requireAdmin, async (req, res) => {
+  try {
+    const r = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
+    res.json({ success: true, webhook: r.data.result });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/admin/referrals', requireAdmin, (req, res) => {
   try {
     const topReferrers = db.prepare(`
@@ -640,8 +657,8 @@ app.get('/api/admin/referrals', requireAdmin, (req, res) => {
       FROM users u
       LEFT JOIN users r ON r.referred_by = u.id
       GROUP BY u.id
-      HAVING referral_count > 0
-      ORDER BY referral_count DESC
+      HAVING COUNT(r.id) > 0
+      ORDER BY COUNT(r.id) DESC
       LIMIT 50
     `).all();
     const totalReferrals = db.prepare('SELECT COUNT(*) as c FROM users WHERE referred_by IS NOT NULL').get()?.c || 0;

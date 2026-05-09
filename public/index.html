@@ -367,6 +367,12 @@
       </div>
 
       <div class="admin-section">
+        <div class="admin-title">⭐ Stars / Webhook</div>
+        <div id="admin-webhook-info" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
+        <button class="btn-admin" onclick="checkWebhook()">🔍 Проверить webhook</button>
+      </div>
+
+      <div class="admin-section">
         <div class="admin-title">🏆 Турнир</div>
         <div id="admin-tournament-status" style="font-size:13px;color:#d1d5db;margin-bottom:10px">Загрузка...</div>
         <div id="admin-tournament-form">
@@ -899,6 +905,26 @@ async function loadAdminReferrals() {
       (list ? '<div style="margin-bottom:8px">' + list + '</div>' : '') +
       (recent ? '<div style="font-size:11px;color:#6b7280;margin-top:6px">Последние:</div>' + recent : '');
   } catch (e) { showToast('❌ Ошибка: ' + e.message); }
+}
+
+
+async function checkWebhook() {
+  try {
+    const res = await fetch('/api/check-webhook', {
+      headers: { 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') }
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('❌ ' + data.error); return; }
+    const wh = data.webhook;
+    const info = [
+      `URL: ${wh.url ? '✅' : '❌ не задан'}`,
+      `Pending: ${wh.pending_update_count || 0}`,
+      `Last error: ${wh.last_error_message || 'нет'}`,
+      `Last error date: ${wh.last_error_date ? new Date(wh.last_error_date * 1000).toLocaleString('ru') : 'нет'}`
+    ].join('<br>');
+    document.getElementById('admin-webhook-info').innerHTML = info;
+    showToast(wh.url ? '✅ Webhook активен' : '❌ Webhook не задан');
+  } catch (e) { showToast('❌ ' + e.message); }
 }
 
 async function loadAdminStats()  {
