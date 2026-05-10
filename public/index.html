@@ -145,6 +145,14 @@
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-80px); } }
 
   .hidden { display: none !important; }
+
+/* RULES MODAL */
+.rules-content { max-height: 80vh; overflow-y: auto; }
+.rules-body { padding: 0 4px; }
+.rules-section { margin-bottom: 18px; }
+.rules-title { font-size: 15px; font-weight: 700; color: #f5c518; margin-bottom: 6px; }
+.rules-text { font-size: 13px; color: #d1d5db; line-height: 1.6; }
+
 </style>
 </head>
 <body>
@@ -213,7 +221,7 @@
     <div class="section-title">Магазин</div>
     <div class="shop-tabs">
       <div class="shop-tab active" onclick="switchShopTab('ton', this)">TON</div>
-      <div class="shop-tab" onclick="switchShopTab('stars', this)">⭐ Stars</div>
+
       <div class="shop-tab" onclick="switchShopTab('boosts', this)">🚀 Бусты</div>
     </div>
 
@@ -238,30 +246,6 @@
         <div class="coins-amount">65,000</div>
         <div class="price">5 TON</div>
         <button class="btn-shop" onclick="buyTon('ton_65000')">Купить</button>
-      </div>
-    </div>
-
-    <!-- Stars packages -->
-    <div id="shop-stars" class="shop-grid hidden">
-      <div class="shop-card">
-        <div class="coins-amount">1,000</div>
-        <div class="price">⭐ 100</div>
-        <button class="btn-shop" onclick="buyStars('stars_100')">Купить</button>
-      </div>
-      <div class="shop-card">
-        <div class="coins-amount">2,750</div>
-        <div class="price">⭐ 250</div>
-        <button class="btn-shop" onclick="buyStars('stars_250')">Купить</button>
-      </div>
-      <div class="shop-card">
-        <div class="coins-amount">6,000</div>
-        <div class="price">⭐ 500</div>
-        <button class="btn-shop" onclick="buyStars('stars_500')">Купить</button>
-      </div>
-      <div class="shop-card">
-        <div class="coins-amount">13,000</div>
-        <div class="price">⭐ 1000</div>
-        <button class="btn-shop" onclick="buyStars('stars_1000')">Купить</button>
       </div>
     </div>
 
@@ -321,6 +305,15 @@
   <div style="padding:16px">
     <div style="font-size:20px;font-weight:800;margin-bottom:16px">⚙️ Ещё</div>
 
+    <!-- Rules button -->
+    <div class="more-card" onclick="openRules()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div class="more-title">📖 Правила игры</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">Как зарабатывать монеты и побеждать</div>
+      </div>
+      <div style="color:#6b7280;font-size:18px">›</div>
+    </div>
+
     <!-- Promo -->
     <div class="more-card">
       <div class="more-title">🎟️ Промокод</div>
@@ -367,7 +360,7 @@
       </div>
 
       <div class="admin-section">
-        <div class="admin-title">⭐ Stars / Webhook</div>
+        <div class="admin-title">🔗 Webhook</div>
         <div id="admin-webhook-info" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
         <button class="btn-admin" onclick="checkWebhook()">🔍 Проверить webhook</button>
       </div>
@@ -386,6 +379,47 @@
       </div>
     </div>
   </div>
+
+
+      <div class="admin-section">
+        <div class="admin-title">⚙️ Параметры игры</div>
+        <div style="font-size:12px;color:#9ca3af;margin-bottom:10px">Текущие значения механик — только чтение.</div>
+        <div style="font-size:13px;color:#d1d5db;line-height:2">
+          <div style="border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px">
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">🪙 Тапы</div>
+            <div>Монет за тап: <b>coins_per_tap</b> (старт: 1)</div>
+            <div>TP за тап: <b>1 TP</b> (фиксировано)</div>
+            <div>Формула: <b>монеты = taps × coins_per_tap</b></div>
+          </div>
+          <div style="border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px">
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">💤 Пассивный доход</div>
+            <div>Доход: <b>idle_per_sec</b> монет/сек (старт: 0)</div>
+            <div>Макс. офлайн: <b>8 часов</b></div>
+            <div>Формула: <b>монеты = idle_per_sec × секунды_офлайн</b></div>
+          </div>
+          <div style="border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px">
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">⚔️ Прокачка</div>
+            <div>Сила тапа: старт <b>500 монет</b>, ×1.5 за покупку, +1 к тапу</div>
+            <div>Пассивный доход: старт <b>800 монет</b>, ×1.5 за покупку, +1/сек</div>
+            <div>Пример цен тапа: 500 → 750 → 1125 → 1687 → ...</div>
+          </div>
+          <div style="border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px">
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">🎁 Бонус / Рефералы</div>
+            <div>Бонус: <b>100–500 монет</b> раз в час</div>
+            <div>Реферал: <b>+500 монет</b> рефереру</div>
+          </div>
+          <div style="border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px">
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">🏆 Турнир</div>
+            <div>Взнос: задаётся при создании (TON)</div>
+            <div>Приз: сумма взносов, распределяется по TP</div>
+          </div>
+          <div>
+            <div style="color:#a78bfa;font-weight:700;margin-bottom:4px">💎 Магазин TON</div>
+            <div id="admin-params-packages" style="color:#9ca3af">Загрузка...</div>
+          </div>
+        </div>
+        <button class="btn-admin" onclick="loadAdminParams()" style="margin-top:10px;background:#374151">🔄 Обновить</button>
+      </div>
 
     <!-- Legal links -->
     <div class="more-card" style="margin-top:16px">
@@ -454,6 +488,8 @@ async function init() {
     state.tp = data.user.tp;
     state.coinsPerTap = data.user.coinsPerTap || 1;
     state.idlePerSec = data.user.idlePerSec || 0;
+    state.tapUpgradeCost = data.user.tapUpgradeCost || 500;
+    state.idleUpgradeCost = data.user.idleUpgradeCost || 800;
     state.referralLink = data.referralLink || '';
     state.isAdmin = data.isAdmin || false;
     state.serverUserId = String(data.user?.id || '');
@@ -461,7 +497,7 @@ async function init() {
     updateUI();
     if (data.referralLink) document.getElementById('referral-link').textContent = data.referralLink;
     if (data.referralEarned) document.getElementById('referral-earned').textContent = data.referralEarned.toLocaleString();
-    if (state.isAdmin) document.getElementById('admin-panel').classList.remove('hidden');
+    if (state.isAdmin) { document.getElementById('admin-panel').classList.remove('hidden'); loadAdminStats(); loadAdminParams(); }
     renderTasks();
     loadFriends();
     if (data.user.idleEarned > 0) showToast(`💰 Пока тебя не было: +${data.user.idleEarned.toLocaleString()} монет`);
@@ -541,11 +577,22 @@ setInterval(() => {
 async function buyUpgrade(type) {
   const cost = type === 'tap' ? state.tapUpgradeCost : state.idleUpgradeCost;
   if (state.coins < cost) { showToast('❌ Недостаточно монет'); return; }
-  state.coins -= cost;
-  if (type === 'tap') { state.coinsPerTap++; state.tapUpgradeCost = Math.floor(state.tapUpgradeCost * 1.5); }
-  else { state.idlePerSec += 1; state.idleUpgradeCost = Math.floor(state.idleUpgradeCost * 1.5); }
-  updateUI();
-  showToast('✅ Прокачано!');
+  try {
+    const res = await fetch('/api/buy-upgrade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
+      body: JSON.stringify({ upgradeType: type })
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
+    state.coins = data.coins;
+    state.coinsPerTap = data.coinsPerTap;
+    state.idlePerSec = data.idlePerSec;
+    state.tapUpgradeCost = data.tapUpgradeCost;
+    state.idleUpgradeCost = data.idleUpgradeCost;
+    updateUI();
+    showToast('✅ Прокачано!');
+  } catch (e) { showToast('❌ Ошибка сети'); }
 }
 
 // ── BONUS ─────────────────────────────────────────────────────────────────
@@ -570,39 +617,6 @@ function switchShopTab(tab, el) {
   document.getElementById('shop-' + tab).classList.remove('hidden');
 }
 
-async function buyStars(packageId) {
-  try {
-    const res = await fetch('/api/stars-invoice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
-      body: JSON.stringify({ packageId })
-    });
-    const data = await res.json();
-    if (!data.success) { showToast('❌ ' + (data.error || 'Ошибка')); return; }
-    if (tg && data.invoiceLink) {
-      tg.openInvoice(data.invoiceLink, async (status) => {
-        if (status === 'paid') {
-          try {
-            const confirmRes = await fetch('/api/stars-success', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': String(tg?.initDataUnsafe?.user?.id || '') },
-              body: JSON.stringify({ packageId })
-            });
-            const confirmData = await confirmRes.json();
-            if (confirmData.success) {
-              showToast('✅ Оплата прошла! Монеты зачислены.');
-            } else {
-              showToast('✅ Оплата прошла! Монеты будут зачислены в течение минуты.');
-            }
-          } catch (e) {
-            showToast('✅ Оплата прошла! Монеты будут зачислены в течение минуты.');
-          }
-          await init();
-        }
-      });
-    }
-  } catch (e) { showToast('❌ Ошибка соединения'); }
-}
 
 function buyTon(packageId) { showToast('🔜 TON-оплата скоро будет доступна'); }
 
@@ -1023,7 +1037,69 @@ function showToast(msg) {
 
 // ── START ─────────────────────────────────────────────────────────────────
 init();
+
+function openRules() { document.getElementById('rules-modal').classList.remove('hidden'); }
+function closeRules() { document.getElementById('rules-modal').classList.add('hidden'); }
+async function loadAdminParams() {
+  try {
+    const res = await fetch('/api/ton-packages');
+    const data = await res.json();
+    const el = document.getElementById('admin-params-packages');
+    if (el && data.packages) {
+      el.innerHTML = data.packages.map(p => p.label + ': ' + p.tons + ' TON → ' + p.coins.toLocaleString() + ' монет').join('<br>');
+    }
+  } catch(e) {}
+}
+
 </script>
 
+<!-- ПРАВИЛА ИГРЫ -->
+<div id="rules-modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closeRules()"></div>
+  <div class="modal-content rules-content">
+    <div class="modal-header">
+      <span>📖 Правила игры</span>
+      <button class="modal-close" onclick="closeRules()">✕</button>
+    </div>
+    <div class="rules-body">
+      <div class="rules-section">
+        <div class="rules-title">🪙 Монеты и тапы</div>
+        <div class="rules-text">Тапай по монете — за каждый тап получаешь монеты. Базовый доход: <b>1 монета за тап</b>. Прокачай силу тапа — и каждый тап будет приносить больше.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">⚡ TP (Tournament Points)</div>
+        <div class="rules-text">За каждый тап начисляется <b>1 TP</b>. TP — это очки турнира. Чем больше тапов, тем выше позиция в турнирной таблице.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">💤 Пассивный доход</div>
+        <div class="rules-text">Монеты начисляются даже когда ты не в игре — до <b>8 часов</b> офлайн. Прокачай пассивный доход, чтобы зарабатывать больше в час.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">⚔️ Прокачка</div>
+        <div class="rules-text">В магазине → Прокачка доступны два улучшения:<br>• <b>Сила тапа</b> — +1 монета за тап. Начальная цена: 500 монет, растёт ×1.5 после каждой покупки.<br>• <b>Пассивный доход</b> — +1 монета в секунду. Начальная цена: 800 монет, растёт ×1.5 после каждой покупки.<br>Прокачка сохраняется навсегда.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">🎁 Ежечасный бонус</div>
+        <div class="rules-text">Раз в час можно получить случайный бонус от <b>100 до 500 монет</b>. Не забывай заходить!</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">📋 Задания</div>
+        <div class="rules-text">Выполняй задания — получай монеты и TP. Задания бывают: тапы, рефералы, достижение уровня. После выполнения нажми «Забрать».</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">👥 Рефералы</div>
+        <div class="rules-text">Приглашай друзей по своей ссылке — получай <b>500 монет</b> за каждого нового игрока.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">🏆 Турнир</div>
+        <div class="rules-text">Турнир идёт ограниченное время. Внеси взнос в TON — попади в призовой пул. Победители получают долю от общего призового фонда пропорционально набранным TP.</div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title">💎 Пополнение баланса</div>
+        <div class="rules-text">Монеты можно купить за TON в разделе Магазин. Оплата через CryptoBot — безопасно и быстро.</div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

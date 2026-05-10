@@ -22,12 +22,17 @@ const TOURNAMENT_CONFIG = {
   currency: 'TON'
 };
 
-const STARS_PACKAGES = [
-  { id: 'stars_100', stars: 100, coins: 1000, label: '1,000 монет' },
-  { id: 'stars_250', stars: 250, coins: 2750, label: '2,750 монет' },
-  { id: 'stars_500', stars: 500, coins: 6000, label: '6,000 монет' },
-  { id: 'stars_1000', stars: 1000, coins: 13000, label: '13,000 монет' },
+const STARS_TON_PACKAGES = [
+  { id: 'ton_1000',  tons: 0.1, coins: 1000,  label: '1,000 монет' },
+  { id: 'ton_5500',  tons: 0.5, coins: 5500,  label: '5,500 монет' },
+  { id: 'ton_12000', tons: 1.0, coins: 12000, label: '12,000 монет' },
+  { id: 'ton_65000', tons: 5.0, coins: 65000, label: '65,000 монет' },
 ];
+
+app.get('/api/ton-packages', (req, res) => {
+  res.json({ packages: TON_PACKAGES });
+});
+
 
 const DB_PATH = process.env.DB_PATH || '/app/data/bank.db';
 const dbDir = path.dirname(DB_PATH);
@@ -164,6 +169,8 @@ const usersMigrations = [
   ['referral_code',     'TEXT'],
   ['referred_by',       'INTEGER'],
   ['referral_earnings', 'INTEGER DEFAULT 0'],
+  ['upgrade_tap_cost',  'INTEGER DEFAULT 500'],
+  ['upgrade_idle_cost', 'INTEGER DEFAULT 800'],
 ];
 for (const [col, type] of usersMigrations) {
   if (!existingCols.includes(col)) {
@@ -323,7 +330,8 @@ app.post('/api/init', (req, res) => {
     res.json({
       success: true,
       user: { id: user.id, username: user.username, firstName: user.first_name, coins: user.coins, tp: user.tp,
-        level: user.level, coinsPerTap: user.coins_per_tap, idlePerSec: user.idle_per_sec, idleIncome: user.idle_per_sec, idleEarned },
+        level: user.level, coinsPerTap: user.coins_per_tap, idlePerSec: user.idle_per_sec, idleIncome: user.idle_per_sec, idleEarned,
+        tapUpgradeCost: user.upgrade_tap_cost || 500, idleUpgradeCost: user.upgrade_idle_cost || 800 },
       tasks: tasksWithProgress, boosts, referralCount, referralLink,
       referralEarned: user.referral_earnings || 0, isAdmin: ADMIN_IDS.includes(String(parseInt(user.id)))
     });
@@ -392,6 +400,32 @@ app.post('/api/redeem-promo', (req, res) => {
     const updatedUser = db.prepare('SELECT coins, tp FROM users WHERE id = ?').get(tgUser.id);
     res.json({ success: true, reward: { coins: promo.reward_coins, tp: promo.reward_tp }, coins: updatedUser.coins, tp: updatedUser.tp });
   } catch (e) { console.error('/api/redeem-promo error:', e); res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/buy-upgrade', (req, res) => {
+  try {
+    const tgUser = getUserFromRequest(req);
+    if (!tgUser) return res.status(401).json({ error: 'Unauthorized' });
+    const { upgradeType } = req.body;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(tgUser.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (upgradeType === 'tap') {
+      const cost = user.upgrade_tap_cost || 500;
+      if (user.coins < cost) return res.status(400).json({ error: 'Недостаточно монет' });
+      db.prepare('UPDATE users SET coins = coins - ?, coins_per_tap = coins_per_tap + 1, upgrade_tap_cost = ? WHERE id = ?')
+        .run(cost, Math.floor(cost * 1.5), user.id);
+    } else if (upgradeType === 'idle') {
+      const cost = user.upgrade_idle_cost || 800;
+      if (user.coins < cost) return res.status(400).json({ error: 'Недостаточно монет' });
+      db.prepare('UPDATE users SET coins = coins - ?, idle_per_sec = idle_per_sec + 1, upgrade_idle_cost = ? WHERE id = ?')
+        .run(cost, Math.floor(cost * 1.5), user.id);
+    } else {
+      return res.status(400).json({ error: 'Unknown upgrade type' });
+    }
+    const u = db.prepare('SELECT coins, coins_per_tap, idle_per_sec, upgrade_tap_cost, upgrade_idle_cost FROM users WHERE id = ?').get(user.id);
+    res.json({ success: true, coins: u.coins, coinsPerTap: u.coins_per_tap,
+      idlePerSec: u.idle_per_sec, tapUpgradeCost: u.upgrade_tap_cost, idleUpgradeCost: u.upgrade_idle_cost });
+  } catch (e) { console.error('/api/buy-upgrade error:', e); res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/buy-boost', (req, res) => {
@@ -515,44 +549,7 @@ app.post('/api/tournament-confirm', async (req, res) => {
   } catch (e) { console.error('/api/tournament-confirm error:', e); res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/stars-invoice', async (req, res) => {
-  try {
-    const tgUser = getUserFromRequest(req);
-    if (!tgUser) return res.status(401).json({ error: 'Unauthorized' });
-    const { packageId } = req.body;
-    const pkg = STARS_PACKAGES.find(p => p.id === packageId);
-    if (!pkg) return res.status(400).json({ error: 'Unknown package' });
-    const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
-      title: `${pkg.label} для TapCrown`,
-      description: `Получи ${pkg.label} в игре TapCrown`,
-      payload: JSON.stringify({ type: 'stars_purchase', userId: tgUser.id, packageId: pkg.id, coins: pkg.coins }),
-      currency: 'XTR',
-      prices: [{ label: pkg.label, amount: pkg.stars }]
-    });
-    if (!response.data.ok) throw new Error(response.data.description);
-    res.json({ success: true, invoiceLink: response.data.result });
-  } catch (e) { console.error('/api/stars-invoice error:', e); res.status(500).json({ error: e.message }); }
-});
 
-app.post('/api/stars-success', (req, res) => {
-  try {
-    const tgUser = getUserFromRequest(req);
-    if (!tgUser) return res.status(401).json({ error: 'Unauthorized' });
-    const { packageId, telegramPaymentChargeId } = req.body;
-    const pkg = STARS_PACKAGES.find(p => p.id === packageId);
-    if (!pkg) return res.status(400).json({ error: 'Unknown package' });
-    const chargeId = telegramPaymentChargeId || null;
-    if (chargeId) {
-      const existing = db.prepare('SELECT id FROM payments WHERE external_id = ?').get(chargeId);
-      if (existing) return res.status(400).json({ error: 'Already processed' });
-    }
-    db.prepare('UPDATE users SET coins = coins + ? WHERE id = ?').run(pkg.coins, tgUser.id);
-    db.prepare('INSERT INTO payments (user_id, type, amount, currency, payload, status, external_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(tgUser.id, 'stars', pkg.stars, 'XTR', JSON.stringify({ packageId }), 'completed', telegramPaymentChargeId || null);
-    const updatedUser = db.prepare('SELECT coins FROM users WHERE id = ?').get(tgUser.id);
-    res.json({ success: true, coins: updatedUser.coins });
-  } catch (e) { console.error('/api/stars-success error:', e); res.status(500).json({ error: e.message }); }
-});
 
 app.post('/api/telegram-webhook', async (req, res) => {
   try {
