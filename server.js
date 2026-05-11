@@ -18,9 +18,45 @@ const TOURNAMENT_CONFIG = {
   entryFee: 0.5,
   prizePoolPercent: 0.8,
   platformPercent: 0.2,
-  durationDays: 7,
   currency: 'TON'
 };
+
+function getPlayerLevel(tp) {
+  if (tp >= 100000) return { emoji: '👑', title: 'Легенда' };
+  if (tp >= 20000)  return { emoji: '💎', title: 'Мастер' };
+  if (tp >= 5000)   return { emoji: '🔥', title: 'Ветеран' };
+  if (tp >= 1000)   return { emoji: '⚔️', title: 'Игрок' };
+  return { emoji: '🌱', title: 'Новичок' };
+}
+
+function getPrizeDistribution(count) {
+  if (count === 1) return [1.0];
+  if (count === 2) return [0.6, 0.4];
+  if (count < 10)  return [0.6, 0.3, 0.1];
+  return [0.60, 0.20, 0.10, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01];
+}
+
+function scheduleNextWeeklyTournament() {
+  try {
+    const existing = db.prepare("SELECT id FROM tournaments WHERE status IN ('active','scheduled')").get();
+    if (existing) return;
+    const now = new Date();
+    const day = now.getUTCDay();
+    const daysUntilSun = day === 0 ? 7 : (7 - day);
+    const startUTC = new Date(now);
+    startUTC.setUTCDate(now.getUTCDate() + daysUntilSun);
+    startUTC.setUTCHours(21, 1, 0, 0);
+    const endUTC = new Date(startUTC);
+    endUTC.setUTCDate(startUTC.getUTCDate() + 7);
+    endUTC.setUTCHours(20, 30, 0, 0);
+    const startsAt = Math.floor(startUTC.getTime() / 1000);
+    const endsAt   = Math.floor(endUTC.getTime() / 1000);
+    db.prepare("INSERT INTO tournaments (title, status, entry_fee, prize_pool, starts_at, ends_at, auto_repeat) VALUES (?, 'scheduled', ?, 0, ?, ?, 1)")
+      .run('Еженедельный турнир', TOURNAMENT_CONFIG.entryFee, startsAt, endsAt);
+    console.log('Next tournament: ' + startUTC.toISOString() + ' (Mon 00:01 MSK)');
+  } catch (e) { console.error('scheduleNextWeeklyTournament error:', e); }
+}
+
 
 const STARS_TON_PACKAGES = [
   { id: 'ton_1000',  tons: 0.1, coins: 1000,  label: '1,000 монет' },
@@ -186,6 +222,14 @@ const teMigrations = [
   ['payment_id',   'TEXT'],
   ['tp_at_entry',  'INTEGER DEFAULT 0'],
 ];
+const tColsExisting = db.pragma('table_info(tournaments)').map(c => c.name);
+const tMigrations = [['winners','TEXT'],['auto_repeat','INTEGER DEFAULT 1']];
+for (const [col, type] of tMigrations) {
+  if (!tColsExisting.includes(col)) {
+    db.exec('ALTER TABLE tournaments ADD COLUMN ' + col + ' ' + type);
+    console.log('Migration: added ' + col + ' to tournaments');
+  }
+}
 for (const [col, type] of teMigrations) {
   if (!teCols.includes(col)) {
     db.exec('ALTER TABLE tournament_entries ADD COLUMN ' + col + ' ' + type);
@@ -331,7 +375,7 @@ app.post('/api/init', (req, res) => {
       success: true,
       user: { id: user.id, username: user.username, firstName: user.first_name, coins: user.coins, tp: user.tp,
         level: user.level, coinsPerTap: user.coins_per_tap, idlePerSec: user.idle_per_sec, idleIncome: user.idle_per_sec, idleEarned,
-        tapUpgradeCost: user.upgrade_tap_cost || 500, idleUpgradeCost: user.upgrade_idle_cost || 800 },
+        tapUpgradeCost: user.upgrade_tap_cost || 500, idleUpgradeCost: user.upgrade_idle_cost || 800, level: getPlayerLevel(user.tp || 0) },
       tasks: tasksWithProgress, boosts, referralCount, referralLink,
       referralEarned: user.referral_earnings || 0, isAdmin: ADMIN_IDS.includes(String(parseInt(user.id)))
     });
@@ -473,6 +517,91 @@ app.get('/api/leaderboard', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+async function finishTournament(tournament) {
+  try {
+    const entries = db.prepare(
+      'SELECT u.id, u.username, u.first_name, u.tp, te.tp_at_entry FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY (u.tp - te.tp_at_entry) DESC'
+    ).all(tournament.id);
+    const count = entries.length;
+    const prizePool = tournament.prize_pool || 0;
+    const dist = getPrizeDistribution(count);
+    const winners = [];
+    for (let i = 0; i < dist.length && i < count; i++) {
+      const player = entries[i];
+      const prize = Math.round(prizePool * dist[i] * 100) / 100;
+      const tournamentTp = Math.max(0, player.tp - player.tp_at_entry);
+      let payStatus = 'pending', payError = null;
+      if (prize > 0 && CRYPTO_BOT_TOKEN) {
+        try {
+          await axios.post(CRYPTO_API_URL + '/transfer', {
+            user_id: player.id, asset: 'TON', amount: prize.toString(),
+            spend_id: 'tournament_' + tournament.id + '_place_' + (i + 1),
+            comment: 'TapCrown #' + tournament.id + ' place ' + (i + 1) + ' TP:' + tournamentTp
+          }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
+          payStatus = 'paid';
+        } catch (e) {
+          payStatus = 'failed';
+          payError = e.response?.data?.error?.name || e.message;
+          console.warn('Pay failed for ' + player.id + ': ' + payError);
+        }
+      }
+      winners.push({ place: i+1, userId: player.id, username: player.username || player.first_name, tournamentTp, prize, payStatus, payError });
+      if (BOT_TOKEN) {
+        const statusText = payStatus === 'paid'
+          ? prize + ' TON отправлено в CryptoBot.'
+          : 'Приз ' + prize + ' TON не удалось отправить. Обратитесь: @coinquestsupport';
+        axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+          chat_id: player.id,
+          text: '🏆 TapCrown #' + tournament.id + ' завершён!\n\nВы заняли ' + (i+1) + ' место!\nTP за турнир: ' + tournamentTp + '\n\n' + statusText
+        }).catch(() => {});
+      }
+    }
+    if (BOT_TOKEN && count > 0) {
+      const medals = ['🥇','🥈','🥉'];
+      const winnerNames = entries.slice(0, Math.min(3, count)).map((p, i) => {
+        const tp = Math.max(0, p.tp - p.tp_at_entry);
+        return (medals[i] || (i+1)+'.') + ' ' + (p.first_name || p.username || 'Player') + ' — ' + tp + ' TP';
+      }).join('\n');
+      for (const entry of entries) {
+        if (!winners.some(w => w.userId === entry.id)) {
+          axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+            chat_id: entry.id,
+            text: '🏆 TapCrown #' + tournament.id + ' завершён!\n\nПобедители:\n' + winnerNames + '\n\nНовый турнир стартует в понедельник 00:01 МСК. 🎮'
+          }).catch(() => {});
+        }
+      }
+    }
+    db.prepare("UPDATE tournaments SET status = 'finished', winners = ? WHERE id = ?")
+      .run(JSON.stringify(winners), tournament.id);
+    console.log('Tournament #' + tournament.id + ' finished. Players: ' + count + ', prize: ' + prizePool + ' TON');
+    if (tournament.auto_repeat !== 0) scheduleNextWeeklyTournament();
+  } catch (e) { console.error('finishTournament error:', e); }
+}
+
+setInterval(async () => {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const toStart = db.prepare("SELECT * FROM tournaments WHERE status = 'scheduled' AND starts_at <= ?").all(now);
+    for (const t of toStart) {
+      db.prepare("UPDATE tournaments SET status = 'active' WHERE id = ?").run(t.id);
+      console.log('Tournament #' + t.id + ' started');
+    }
+    const toFinish = db.prepare("SELECT * FROM tournaments WHERE status = 'active' AND ends_at <= ?").all(now);
+    for (const t of toFinish) {
+      console.log('Finishing tournament #' + t.id);
+      await finishTournament(t);
+    }
+  } catch (e) { console.error('Cron tournament error:', e); }
+}, 60 * 1000);
+
+(function initTournamentSchedule() {
+  try {
+    const active = db.prepare("SELECT id FROM tournaments WHERE status IN ('active','scheduled')").get();
+    if (!active) scheduleNextWeeklyTournament();
+  } catch(e) { console.error('initTournamentSchedule error:', e); }
+})();
+
 app.get('/api/tournament', (req, res) => {
   try {
     const tgUser = getUserFromRequest(req);
@@ -482,8 +611,17 @@ app.get('/api/tournament', (req, res) => {
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
     const prizePool = tournament.prize_pool || (playersCount * tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent);
     const isInTournament = !!db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournament.id, tgUser.id);
-    const topPlayers = db.prepare('SELECT u.id, u.username, u.first_name, u.tp FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY u.tp DESC LIMIT 10').all(tournament.id);
-    res.json({ success: true, tournament: { ...tournament, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers } });
+    const topPlayersRaw = db.prepare('SELECT u.id, u.username, u.first_name, u.tp, te.tp_at_entry FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY (u.tp - te.tp_at_entry) DESC LIMIT 10').all(tournament.id);
+    const topPlayers = topPlayersRaw.map(p => {
+      const tournamentTp = Math.max(0, p.tp - p.tp_at_entry);
+      const level = getPlayerLevel(p.tp);
+      return { id: p.id, username: p.username, firstName: p.first_name, tp: tournamentTp, totalTp: p.tp, level };
+    });
+    const myEntry = db.prepare('SELECT tp_at_entry FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournament.id, tgUser.id);
+    const myUser  = db.prepare('SELECT tp FROM users WHERE id = ?').get(tgUser.id);
+    const myTournamentTp = myEntry ? Math.max(0, (myUser?.tp || 0) - myEntry.tp_at_entry) : 0;
+    const myLevel = getPlayerLevel(myUser?.tp || 0);
+    res.json({ success: true, tournament: { ...tournament, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers, myTournamentTp, myLevel } });
   } catch (e) { console.error('/api/tournament error:', e); res.status(500).json({ error: e.message }); }
 });
 
@@ -533,8 +671,9 @@ app.post('/api/tournament-confirm', async (req, res) => {
     if (data.type !== 'tournament_entry' || data.userId != tgUser.id) {
       return res.status(400).json({ error: 'Неверный инвойс' });
     }
-    db.prepare('INSERT OR IGNORE INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id) VALUES (?, ?, ?, ?)')
-      .run(tournament.id, tgUser.id, parseFloat(invoice.amount), String(invoice.invoice_id));
+    const userForEntry = db.prepare('SELECT tp FROM users WHERE id = ?').get(tgUser.id);
+    db.prepare('INSERT OR IGNORE INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id, tp_at_entry) VALUES (?, ?, ?, ?, ?)')
+      .run(tournament.id, tgUser.id, parseFloat(invoice.amount), String(invoice.invoice_id), userForEntry?.tp || 0);
     db.prepare('UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?')
       .run(parseFloat(invoice.amount) * TOURNAMENT_CONFIG.prizePoolPercent, tournament.id);
     // Уведомление
@@ -752,12 +891,12 @@ app.post('/api/admin/create-tournament', requireAdmin, (req, res) => {
 });
 
 // Завершить активный турнир (админ)
-app.post('/api/admin/end-tournament', requireAdmin, (req, res) => {
+app.post('/api/admin/end-tournament', requireAdmin, async (req, res) => {
   try {
     const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
     if (!tournament) return res.status(404).json({ error: 'Нет активного турнира' });
-    db.prepare("UPDATE tournaments SET status = 'finished' WHERE id = ?").run(tournament.id);
-    res.json({ success: true, message: 'Турнир завершён' });
+    res.json({ success: true, message: 'Завершение запущено, выплаты обрабатываются...' });
+    await finishTournament(tournament);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -694,35 +694,28 @@ async function loadTournament() {
     }
     const t = data.tournament;
     const medals = ['🥇','🥈','🥉'];
-    const topHtml = (t.topPlayers || []).map((p, i) =>
-      `<div class="leader-card">
-        <div class="leader-rank">${medals[i] || (i+1)}</div>
-        <div class="leader-info"><div class="leader-name">${p.first_name || p.username || 'Игрок'}</div><div class="leader-tp">🏆 ${(p.tp||0).toLocaleString()} TP</div></div>
-      </div>`
-    ).join('');
-    const btnText = t.isInTournament ? '✅ Вы в турнире' : `Войти — ${t.entryFee} TON`;
-    const btnClass = t.isInTournament ? 'joined' : '';
-    const btnDisabled = t.isInTournament ? 'disabled' : '';
-    el.innerHTML = `
-      <div class="tournament-card">
-        <div class="tournament-title">🏆 ${t.title}</div>
-        <div class="prize-pool">
-          <div class="prize-amount">${t.prizePool} TON</div>
-          <div class="prize-label">Призовой фонд</div>
-        </div>
-        <div class="tournament-info">
-          <div class="t-info-item"><div class="t-info-value">${t.playersCount}</div><div class="t-info-label">Игроков</div></div>
-          <div class="t-info-item"><div class="t-info-value">${t.entryFee} TON</div><div class="t-info-label">Взнос</div></div>
-          <div class="t-info-item"><div class="t-info-value">${t.prizePoolPercent}%</div><div class="t-info-label">В приз</div></div>
-        </div>
-        <div class="tournament-split">80% — победителям · 20% — платформе</div>
-        <div class="tournament-timer" id="tournament-timer" style="text-align:center;margin:10px 0;font-size:14px;color:#a78bfa">⏱ Загрузка...</div>
-        <button class="btn-tournament ${btnClass}" ${btnDisabled} onclick="joinTournament()">${btnText}</button>
-      </div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:8px">Топ игроков</div>
-      ${topHtml || '<div style="color:#9ca3af;font-size:13px">Пока никого нет</div>'}
-    `;
-    startTournamentTimer(t.ends_at);
+    const isScheduled = t.status === 'scheduled';
+    const myLvl = t.myLevel || { emoji: '🌱', title: 'Новичок' };
+    const myTpBlock = t.isInTournament
+      ? `<div style="text-align:center;margin:8px 0;font-size:13px;color:#a78bfa">${myLvl.emoji} <b>${myLvl.title}</b> · Ваши TP в турнире: <b>${(t.myTournamentTp||0).toLocaleString()}</b></div>`
+      : '';
+    const topHtml = (t.topPlayers || []).map((p, i) => {
+      const lvl = p.level || { emoji: '🌱', title: 'Новичок' };
+      const name = p.firstName || p.username || 'Игрок';
+      return `<div class="leader-card"><div class="leader-rank">${medals[i] || (i+1)}</div><div class="leader-info"><div class="leader-name">${lvl.emoji} ${name} <span style="font-size:11px;color:#9ca3af">${lvl.title}</span></div><div class="leader-tp">🏆 ${(p.tp||0).toLocaleString()} TP за турнир</div></div></div>`;
+    }).join('');
+    const cnt = t.playersCount || 0;
+    const prizeFormula = cnt <= 1 ? '🥇 100%' : cnt === 2 ? '🥇 60% · 🥈 40%' : cnt < 10 ? '🥇 60% · 🥈 30% · 🥉 10%' : '🥇 60% · 🥈 20% · 🥉 10% · остальные по 1%';
+    let actionBlock = '';
+    if (isScheduled) {
+      actionBlock = `<div style="text-align:center;padding:16px 0"><div style="font-size:13px;color:#9ca3af;margin-bottom:6px">Следующий турнир начнётся через</div><div id="tournament-timer" style="font-size:22px;font-weight:700;color:#a78bfa;letter-spacing:2px">--:--:--</div><div style="font-size:12px;color:#6b7280;margin-top:4px">пн 00:01 МСК</div></div>`;
+    } else if (t.isInTournament) {
+      actionBlock = `<div class="tournament-timer" id="tournament-timer" style="text-align:center;margin:10px 0;font-size:14px;color:#a78bfa">⏱ Загрузка...</div><button class="btn-tournament joined" disabled>✅ Вы в турнире</button>`;
+    } else {
+      actionBlock = `<div class="tournament-timer" id="tournament-timer" style="text-align:center;margin:10px 0;font-size:14px;color:#a78bfa">⏱ Загрузка...</div><button class="btn-tournament" onclick="joinTournament()">Войти — ${t.entryFee} TON</button>`;
+    }
+    el.innerHTML = `<div class="tournament-card"><div class="tournament-title">🏆 ${t.title}</div><div class="prize-pool"><div class="prize-amount">${t.prizePool} TON</div><div class="prize-label">Призовой фонд</div></div><div class="tournament-info"><div class="t-info-item"><div class="t-info-value">${t.playersCount}</div><div class="t-info-label">Игроков</div></div><div class="t-info-item"><div class="t-info-value">${t.entryFee} TON</div><div class="t-info-label">Взнос</div></div><div class="t-info-item"><div class="t-info-value">${t.prizePoolPercent}%</div><div class="t-info-label">В приз</div></div></div><div class="tournament-split" style="font-size:12px;color:#9ca3af;text-align:center;margin:6px 0">${prizeFormula}</div>${myTpBlock}${actionBlock}</div><div style="font-size:15px;font-weight:700;margin:12px 0 8px">Топ игроков</div>${topHtml || '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px">Пока никого нет</div>'}`;
+    if (isScheduled) { startScheduledTimer(t.starts_at); } else { startTournamentTimer(t.ends_at); }
   } catch (e) { document.getElementById('tournament-content').innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px">Ошибка загрузки</div>'; }
 }
 
@@ -735,15 +728,32 @@ function startTournamentTimer(endsAt) {
     const diff = endsAt - now;
     if (diff <= 0) { el.textContent = '⏱ Турнир завершён'; clearInterval(window._tournamentTimerInterval); return; }
     const d = Math.floor(diff / 86400);
-    const h = Math.floor((diff % 86400) / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const s = diff % 60;
+    const hh = Math.floor((diff % 86400) / 3600);
+    const mm = Math.floor((diff % 3600) / 60);
+    const ss = diff % 60;
     const parts = [];
     if (d > 0) parts.push(d + 'д');
-    parts.push(String(h).padStart(2,'0') + 'ч');
-    parts.push(String(m).padStart(2,'0') + 'м');
-    parts.push(String(s).padStart(2,'0') + 'с');
+    parts.push(String(hh).padStart(2,'0') + 'ч');
+    parts.push(String(mm).padStart(2,'0') + 'м');
+    parts.push(String(ss).padStart(2,'0') + 'с');
     el.textContent = '⏱ До конца: ' + parts.join(' ');
+  }
+  update();
+  window._tournamentTimerInterval = setInterval(update, 1000);
+}
+
+function startScheduledTimer(startsAt) {
+  const el = document.getElementById('tournament-timer');
+  if (!el) return;
+  if (window._tournamentTimerInterval) clearInterval(window._tournamentTimerInterval);
+  function update() {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = startsAt - now;
+    if (diff <= 0) { el.textContent = '00:00:00'; clearInterval(window._tournamentTimerInterval); return; }
+    const hh = Math.floor(diff / 3600);
+    const mm = Math.floor((diff % 3600) / 60);
+    const ss = diff % 60;
+    el.textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') + ':' + String(ss).padStart(2,'0');
   }
   update();
   window._tournamentTimerInterval = setInterval(update, 1000);
