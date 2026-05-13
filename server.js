@@ -922,7 +922,7 @@ app.post('/api/admin/start-tournament', requireAdmin, (req, res) => {
     console.log('Admin manually started tournament #' + t.id);
     res.json({ success: true, message: 'Турнир #' + t.id + ' запущен' });
   } catch (e) { res.status(500).json({ error: e.message }); }
-}););
+});
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
