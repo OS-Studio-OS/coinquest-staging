@@ -606,7 +606,7 @@ app.get('/api/tournament', (req, res) => {
   try {
     const tgUser = getUserFromRequest(req);
     if (!tgUser) return res.status(401).json({ error: 'Unauthorized' });
-    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status IN ('active','scheduled') ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, id DESC LIMIT 1").get();
     if (!tournament) return res.json({ success: true, tournament: null });
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
     const prizePool = tournament.prize_pool || (playersCount * tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent);
@@ -621,7 +621,7 @@ app.get('/api/tournament', (req, res) => {
     const myUser  = db.prepare('SELECT tp FROM users WHERE id = ?').get(tgUser.id);
     const myTournamentTp = myEntry ? Math.max(0, (myUser?.tp || 0) - myEntry.tp_at_entry) : 0;
     const myLevel = getPlayerLevel(myUser?.tp || 0);
-    res.json({ success: true, tournament: { ...tournament, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers, myTournamentTp, myLevel } });
+    res.json({ success: true, tournament: { ...tournament, status: tournament.status, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers, myTournamentTp, myLevel } });
   } catch (e) { console.error('/api/tournament error:', e); res.status(500).json({ error: e.message }); }
 });
 
@@ -865,7 +865,7 @@ app.get('/api/check-webhook', async (req, res) => {
 // Получить текущий турнир для админа
 app.get('/api/admin/tournament', requireAdmin, (req, res) => {
   try {
-    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status IN ('active','scheduled') ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, id DESC LIMIT 1").get();
     if (!tournament) return res.json({ success: true, tournament: null });
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
     res.json({ success: true, tournament: { ...tournament, playersCount } });
@@ -891,14 +891,38 @@ app.post('/api/admin/create-tournament', requireAdmin, (req, res) => {
 });
 
 // Завершить активный турнир (админ)
-app.post('/api/admin/end-tournament', requireAdmin, async (req, res) => {
+app.post('/api/admin/init-tournament', requireAdmin, (req, res) => {
   try {
-    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
-    if (!tournament) return res.status(404).json({ error: 'Нет активного турнира' });
-    res.json({ success: true, message: 'Завершение запущено, выплаты обрабатываются...' });
-    await finishTournament(tournament);
+    db.prepare("UPDATE tournaments SET status = 'finished' WHERE status IN ('active','scheduled')").run();
+    const now = new Date();
+    const day = now.getUTCDay();
+    const daysUntilMon = day === 1 ? 7 : (8 - day) % 7 || 7;
+    const startUTC = new Date(now);
+    startUTC.setUTCDate(now.getUTCDate() + daysUntilMon);
+    startUTC.setUTCHours(21, 1, 0, 0);
+    const endUTC = new Date(startUTC);
+    endUTC.setUTCDate(startUTC.getUTCDate() + 6);
+    endUTC.setUTCHours(20, 59, 0, 0);
+    const startsAt = Math.floor(startUTC.getTime() / 1000);
+    const endsAt   = Math.floor(endUTC.getTime() / 1000);
+    const result = db.prepare("INSERT INTO tournaments (title, status, entry_fee, prize_pool, starts_at, ends_at, auto_repeat) VALUES (?, 'scheduled', ?, 0, ?, ?, 1)")
+      .run('Еженедельный турнир', TOURNAMENT_CONFIG.entryFee, startsAt, endsAt);
+    console.log('Admin created scheduled tournament #' + result.lastInsertRowid + ' starts=' + startUTC.toISOString());
+    res.json({ success: true, tournamentId: result.lastInsertRowid, startsAt, endsAt,
+      startsAtHuman: startUTC.toISOString() + ' (пн 00:01 МСК)',
+      endsAtHuman: endUTC.toISOString() + ' (вс 23:59 МСК)' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+app.post('/api/admin/start-tournament', requireAdmin, (req, res) => {
+  try {
+    const t = db.prepare("SELECT * FROM tournaments WHERE status = 'scheduled' ORDER BY id DESC LIMIT 1").get();
+    if (!t) return res.status(404).json({ error: 'Нет scheduled турнира' });
+    db.prepare("UPDATE tournaments SET status = 'active' WHERE id = ?").run(t.id);
+    console.log('Admin manually started tournament #' + t.id);
+    res.json({ success: true, message: 'Турнир #' + t.id + ' запущен' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}););
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 

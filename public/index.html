@@ -374,6 +374,7 @@
           <input class="admin-input" id="admin-t-days" placeholder="Длительность (дней)" type="number" value="7">
           <button class="btn-admin" onclick="adminCreateTournament()">🚀 Создать турнир</button>
         </div>
+        <button class="btn-admin" id="admin-start-tournament-btn" onclick="adminStartTournament()" style="background:#065f46;display:none;margin-top:6px">▶️ Запустить турнир</button>
         <button class="btn-admin" id="admin-end-tournament-btn" onclick="adminEndTournament()" style="background:#7f1d1d;display:none;margin-top:6px">⛔ Завершить турнир</button>
         <button class="btn-admin" onclick="loadAdminTournament()" style="background:#374151;margin-top:6px">🔄 Обновить</button>
       </div>
@@ -846,9 +847,10 @@ async function redeemPromo() {
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 async function loadAdminTournament() {
-  const statusEl = document.getElementById('admin-tournament-status');
-  const formEl = document.getElementById('admin-tournament-form');
-  const endBtn = document.getElementById('admin-end-tournament-btn');
+  const statusEl  = document.getElementById('admin-tournament-status');
+  const formEl    = document.getElementById('admin-tournament-form');
+  const endBtn    = document.getElementById('admin-end-tournament-btn');
+  const startBtn  = document.getElementById('admin-start-tournament-btn');
   try {
     const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
     const res = await fetch('/api/admin/tournament', {
@@ -857,15 +859,25 @@ async function loadAdminTournament() {
     const data = await res.json();
     if (!data.success) { statusEl.textContent = '❌ Ошибка загрузки'; return; }
     if (!data.tournament) {
-      statusEl.textContent = '⚪ Активного турнира нет';
+      statusEl.textContent = '⚪ Турниров нет';
       formEl.style.display = 'block';
+      if (startBtn) startBtn.style.display = 'none';
       endBtn.style.display = 'none';
     } else {
       const t = data.tournament;
-      const endDate = new Date(t.ends_at * 1000).toLocaleDateString('ru-RU');
-      statusEl.innerHTML = `✅ <b>${t.title}</b><br>Игроков: ${t.playersCount} · Взнос: ${t.entry_fee} TON · Призовой фонд: ${t.prize_pool} TON<br>Завершается: ${endDate}`;
+      const isScheduled = t.status === 'scheduled';
+      const dateLabel = isScheduled ? 'Старт' : 'Завершение';
+      const dateVal   = isScheduled
+        ? new Date(t.starts_at * 1000).toLocaleString('ru-RU')
+        : new Date(t.ends_at   * 1000).toLocaleString('ru-RU');
+      const statusIcon  = isScheduled ? '⏳' : '✅';
+      const statusLabel = isScheduled ? 'Запланирован' : 'Активен';
+      statusEl.innerHTML = statusIcon + ' <b>' + t.title + '</b> [' + statusLabel + ']<br>'
+        + 'Игроков: ' + (t.playersCount || 0) + ' · Взнос: ' + t.entry_fee + ' TON · Фонд: ' + t.prize_pool + ' TON<br>'
+        + dateLabel + ': ' + dateVal;
       formEl.style.display = 'none';
-      endBtn.style.display = 'block';
+      if (startBtn) startBtn.style.display = isScheduled ? 'block' : 'none';
+      endBtn.style.display = isScheduled ? 'none' : 'block';
     }
   } catch (e) { statusEl.textContent = '❌ ' + e.message; }
 }
@@ -886,6 +898,21 @@ async function adminCreateTournament() {
     if (data.error) { showToast('❌ ' + data.error); return; }
     showToast('✅ Турнир создан!');
     loadAdminTournament();
+  } catch (e) { showToast('❌ ' + e.message); }
+}
+
+async function adminStartTournament() {
+  if (!confirm('Запустить турнир сейчас?')) return;
+  try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
+    const res = await fetch('/api/admin/start-tournament', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid }
+    });
+    const data = await res.json();
+    if (data.error) { showToast('❌ ' + data.error); return; }
+    showToast('✅ ' + data.message);
+    setTimeout(() => { loadAdminTournament(); loadTournament(); }, 800);
   } catch (e) { showToast('❌ ' + e.message); }
 }
 
