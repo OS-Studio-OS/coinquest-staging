@@ -66,7 +66,7 @@ const STARS_TON_PACKAGES = [
 ];
 
 app.get('/api/ton-packages', (req, res) => {
-  res.json({ packages: TON_PACKAGES });
+  res.json({ packages: STARS_TON_PACKAGES });
 });
 
 
@@ -521,7 +521,7 @@ app.get('/api/leaderboard', (req, res) => {
 async function finishTournament(tournament) {
   try {
     const entries = db.prepare(
-      'SELECT u.id, u.username, u.first_name, u.tp, te.tp_at_entry FROM tournament_entries te JOIN users u ON u.id = te.user_id WHERE te.tournament_id = ? ORDER BY (u.tp - te.tp_at_entry) DESC'
+      'SELECT u.id, u.username, u.first_name, u.tp, te.tp_at_entry FROM tournament_entries te JOIN users u ON CAST(u.id AS INTEGER) = CAST(te.user_id AS INTEGER) WHERE te.tournament_id = ? GROUP BY CAST(te.user_id AS INTEGER) ORDER BY (u.tp - te.tp_at_entry) DESC'
     ).all(tournament.id);
     const count = entries.length;
     const prizePool = tournament.prize_pool || 0;
@@ -535,16 +535,21 @@ async function finishTournament(tournament) {
       if (prize > 0 && CRYPTO_BOT_TOKEN) {
         try {
           await axios.post(CRYPTO_API_URL + '/transfer', {
-            user_id: player.id, asset: 'TON', amount: prize.toString(),
+            user_id: parseInt(player.id), asset: 'TON', amount: prize.toString(),
             spend_id: 'tournament_' + tournament.id + '_place_' + (i + 1),
             comment: 'TapCrown #' + tournament.id + ' place ' + (i + 1) + ' TP:' + tournamentTp
           }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
           payStatus = 'paid';
         } catch (e) {
           payStatus = 'failed';
-          payError = e.response?.data?.error?.name || e.response?.data?.error?.code || e.message;
+          const errCode = e.response?.data?.error?.name || e.response?.data?.error?.code || e.message;
+          payError = errCode;
           const cryptoDetail = JSON.stringify(e.response?.data || e.message);
-          console.error('CryptoBot pay FAILED userId=' + player.id + ' prize=' + prize + ' TON error=' + cryptoDetail);
+          if (errCode === 'METHOD_DISABLED') {
+            console.error('CryptoBot TRANSFERS DISABLED — включи в @CryptoBot → My Apps → Transfers to Users. userId=' + parseInt(player.id) + ' prize=' + prize + ' TON');
+          } else {
+            console.error('CryptoBot pay FAILED userId=' + parseInt(player.id) + ' prize=' + prize + ' TON error=' + cryptoDetail);
+          }
         }
       }
       winners.push({ place: i+1, userId: player.id, username: player.username || player.first_name, tournamentTp, prize, payStatus, payError });
@@ -739,16 +744,18 @@ app.post('/api/crypto-webhook', (req, res) => {
         const { userId, tournamentId } = data;
         const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
         if (tournament && userId) {
-          const alreadyIn = db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournamentId, userId);
+          const userIdInt = parseInt(userId);
+          const alreadyIn = db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND user_id = ?').get(tournamentId, userIdInt);
           if (!alreadyIn) {
-            db.prepare('INSERT INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id) VALUES (?, ?, ?, ?)')
-              .run(tournamentId, userId, invoice.amount, invoice.invoice_id);
+            const userForTp = db.prepare('SELECT tp FROM users WHERE id = ?').get(userIdInt);
+            db.prepare('INSERT OR IGNORE INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id, tp_at_entry) VALUES (?, ?, ?, ?, ?)')
+              .run(tournamentId, userIdInt, parseFloat(invoice.amount), String(invoice.invoice_id), userForTp?.tp || 0);
             db.prepare('UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?')
               .run(parseFloat(invoice.amount) * TOURNAMENT_CONFIG.prizePoolPercent, tournamentId);
             if (BOT_TOKEN) {
-              const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+              const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userIdInt);
               axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                chat_id: userId,
+                chat_id: userIdInt,
                 text: `✅ Вы вошли в турнир TapCrown #${tournamentId}!\n\nВзнос: ${invoice.amount} TON\nВаши TP: ${user?.tp || 0}\n\nУдачи! 🏆`
               }).catch(() => {});
             }
