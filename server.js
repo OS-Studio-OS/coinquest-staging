@@ -542,8 +542,9 @@ async function finishTournament(tournament) {
           payStatus = 'paid';
         } catch (e) {
           payStatus = 'failed';
-          payError = e.response?.data?.error?.name || e.message;
-          console.warn('Pay failed for ' + player.id + ': ' + payError);
+          payError = e.response?.data?.error?.name || e.response?.data?.error?.code || e.message;
+          const cryptoDetail = JSON.stringify(e.response?.data || e.message);
+          console.error('CryptoBot pay FAILED userId=' + player.id + ' prize=' + prize + ' TON error=' + cryptoDetail);
         }
       }
       winners.push({ place: i+1, userId: player.id, username: player.username || player.first_name, tournamentTp, prize, payStatus, payError });
@@ -866,9 +867,11 @@ app.get('/api/check-webhook', async (req, res) => {
 app.get('/api/admin/tournament', requireAdmin, (req, res) => {
   try {
     const tournament = db.prepare("SELECT * FROM tournaments WHERE status IN ('active','scheduled') ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, id DESC LIMIT 1").get();
-    if (!tournament) return res.json({ success: true, tournament: null });
+    const lastFinished = db.prepare("SELECT * FROM tournaments WHERE status = 'finished' ORDER BY id DESC LIMIT 1").get();
+    const lastWinners = lastFinished ? JSON.parse(lastFinished.winners || '[]') : [];
+    if (!tournament) return res.json({ success: true, tournament: null, lastFinished: lastFinished || null, lastWinners });
     const playersCount = db.prepare('SELECT COUNT(*) as c FROM tournament_entries WHERE tournament_id = ?').get(tournament.id)?.c || 0;
-    res.json({ success: true, tournament: { ...tournament, playersCount } });
+    res.json({ success: true, tournament: { ...tournament, playersCount }, lastFinished: lastFinished || null, lastWinners });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -921,6 +924,42 @@ app.post('/api/admin/start-tournament', requireAdmin, (req, res) => {
     db.prepare("UPDATE tournaments SET status = 'active' WHERE id = ?").run(t.id);
     console.log('Admin manually started tournament #' + t.id);
     res.json({ success: true, message: 'Турнир #' + t.id + ' запущен' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/admin/retry-payment', requireAdmin, async (req, res) => {
+  try {
+    const { tournamentId, userId } = req.body;
+    if (!tournamentId || !userId) return res.status(400).json({ error: 'Нужны tournamentId и userId' });
+    const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
+    if (!tournament) return res.status(404).json({ error: 'Турнир не найден' });
+    const winners = JSON.parse(tournament.winners || '[]');
+    const winner = winners.find(w => String(w.userId) === String(userId));
+    if (!winner) return res.status(404).json({ error: 'Победитель не найден' });
+    if (winner.payStatus === 'paid') return res.json({ success: true, message: 'Уже оплачено' });
+    if (!CRYPTO_BOT_TOKEN) return res.status(500).json({ error: 'CRYPTO_BOT_TOKEN не настроен' });
+    if (winner.prize <= 0) return res.status(400).json({ error: 'Приз = 0' });
+    try {
+      await axios.post(CRYPTO_API_URL + '/transfer', {
+        user_id: Number(userId), asset: 'TON', amount: winner.prize.toString(),
+        spend_id: 'tournament_' + tournamentId + '_place_' + winner.place + '_retry',
+        comment: 'TapCrown #' + tournamentId + ' место ' + winner.place + ' (повторная выплата)'
+      }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
+      winner.payStatus = 'paid'; winner.payError = null;
+      db.prepare('UPDATE tournaments SET winners = ? WHERE id = ?').run(JSON.stringify(winners), tournamentId);
+      if (BOT_TOKEN) {
+        axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+          chat_id: userId,
+          text: '✅ Приз ' + winner.prize + ' TON за TapCrown #' + tournamentId + ' (место ' + winner.place + ') успешно отправлен!'
+        }).catch(() => {});
+      }
+      console.log('Retry payment SUCCESS userId=' + userId + ' prize=' + winner.prize + ' TON');
+      res.json({ success: true, message: 'Выплата ' + winner.prize + ' TON успешно отправлена' });
+    } catch (e) {
+      const detail = JSON.stringify(e.response?.data || e.message);
+      console.error('Retry payment FAILED userId=' + userId + ' error=' + detail);
+      res.status(500).json({ error: 'Ошибка CryptoBot: ' + (e.response?.data?.error?.name || e.message), detail });
+    }
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

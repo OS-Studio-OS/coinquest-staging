@@ -381,6 +381,11 @@
     </div>
   </div>
 
+  <div class="admin-section" id="admin-winners-block" style="display:none">
+    <div class="admin-title">🏆 Победители последнего турнира</div>
+    <div id="admin-winners-list" style="font-size:13px;color:#d1d5db;line-height:1.8"></div>
+  </div>
+
 
       <div class="admin-section">
         <div class="admin-title">⚙️ Параметры игры</div>
@@ -879,6 +884,24 @@ async function loadAdminTournament() {
       if (startBtn) startBtn.style.display = isScheduled ? 'block' : 'none';
       endBtn.style.display = isScheduled ? 'none' : 'block';
     }
+    const winnersBlock = document.getElementById('admin-winners-block');
+    const winnersList  = document.getElementById('admin-winners-list');
+    if (winnersBlock && winnersList && data.lastWinners && data.lastWinners.length > 0) {
+      const medals = ['🥇','🥈','🥉'];
+      const tId = data.lastFinished?.id;
+      winnersList.innerHTML = data.lastWinners.map((w, i) => {
+        const icon = medals[i] || (i+1)+'.';
+        const payIcon = w.payStatus === 'paid' ? '✅' : '❌';
+        const retryBtn = w.payStatus !== 'paid'
+          ? ' <button onclick="adminRetryPayment(' + tId + ',' + w.userId + ')" style="font-size:11px;padding:2px 8px;background:#7c3aed;border:none;border-radius:4px;color:#fff;cursor:pointer">🔄 Повторить</button>'
+          : '';
+        const errText = w.payError ? ' <span style="color:#f87171;font-size:11px">(' + w.payError + ')</span>' : '';
+        return '<div style="border-bottom:1px solid #1f2937;padding:4px 0">' + icon + ' ' + (w.username || w.userId) + ' — ' + w.tournamentTp + ' TP — ' + w.prize + ' TON ' + payIcon + errText + retryBtn + '</div>';
+      }).join('');
+      winnersBlock.style.display = 'block';
+    } else if (winnersBlock) {
+      winnersBlock.style.display = 'none';
+    }
   } catch (e) { statusEl.textContent = '❌ ' + e.message; }
 }
 
@@ -914,6 +937,21 @@ async function adminStartTournament() {
     showToast('✅ ' + data.message);
     setTimeout(() => { loadAdminTournament(); loadTournament(); }, 800);
   } catch (e) { showToast('❌ ' + e.message); }
+}
+
+async function adminRetryPayment(tournamentId, userId) {
+  try {
+    const uid = String(tg?.initDataUnsafe?.user?.id || state.serverUserId || '');
+    const res = await fetch('/api/admin/retry-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': tg?.initData || '', 'x-user-id': uid },
+      body: JSON.stringify({ tournamentId, userId })
+    });
+    const data = await res.json();
+    if (data.error) { showToast('❌ ' + data.error); return; }
+    showToast('✅ ' + data.message);
+    setTimeout(() => loadAdminTournament(), 800);
+  } catch(e) { showToast('❌ ' + e.message); }
 }
 
 async function adminEndTournament() {
