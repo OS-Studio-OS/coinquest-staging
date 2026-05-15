@@ -917,6 +917,15 @@ app.post('/api/admin/init-tournament', requireAdmin, (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/admin/end-tournament', requireAdmin, async (req, res) => {
+  try {
+    const tournament = db.prepare("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+    if (!tournament) return res.status(404).json({ error: 'Нет активного турнира' });
+    res.json({ success: true, message: 'Завершение запущено, выплаты обрабатываются...' });
+    await finishTournament(tournament);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/admin/start-tournament', requireAdmin, (req, res) => {
   try {
     const t = db.prepare("SELECT * FROM tournaments WHERE status = 'scheduled' ORDER BY id DESC LIMIT 1").get();
