@@ -18,7 +18,9 @@ const TOURNAMENT_CONFIG = {
   entryFee: 0.5,
   prizePoolPercent: 0.8,
   platformPercent: 0.2,
-  currency: 'TON'
+  currency: 'TON',
+  minPlayers: 20,
+  refundChoiceHours: 48
 };
 
 function getPlayerLevel(tp) {
@@ -524,6 +526,33 @@ async function finishTournament(tournament) {
       'SELECT u.id, u.username, u.first_name, u.tp, te.tp_at_entry FROM tournament_entries te JOIN users u ON CAST(u.id AS INTEGER) = CAST(te.user_id AS INTEGER) WHERE te.tournament_id = ? GROUP BY CAST(te.user_id AS INTEGER) ORDER BY (u.tp - te.tp_at_entry) DESC'
     ).all(tournament.id);
     const count = entries.length;
+    // Проверка минимального числа участников
+    if (count < TOURNAMENT_CONFIG.minPlayers) {
+      db.prepare("UPDATE tournaments SET status = 'cancelled' WHERE id = ?").run(tournament.id);
+      console.log('Tournament #' + tournament.id + ' cancelled — only ' + count + '/' + TOURNAMENT_CONFIG.minPlayers + ' players');
+      if (BOT_TOKEN) {
+        const deadlineTs = Math.floor(Date.now() / 1000) + TOURNAMENT_CONFIG.refundChoiceHours * 3600;
+        db.prepare("UPDATE tournaments SET refund_deadline = ? WHERE id = ?").run(deadlineTs, tournament.id);
+        for (const entry of entries) {
+          const refundAmount = Math.round(tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent * 100) / 100;
+          axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+            chat_id: parseInt(entry.id),
+            text: '⚠️ TapCrown #' + tournament.id + ' не состоялся\n\n' +
+                  'Набралось ' + count + ' из ' + TOURNAMENT_CONFIG.minPlayers + ' участников.\n\n' +
+                  'Выберите, что сделать с вашим взносом ' + tournament.entry_fee + ' TON:\n\n' +
+                  '• Перейти в следующий турнир (взнос сохраняется)\n' +
+                  '• Вернуть ' + refundAmount + ' TON (за вычетом 20% комиссии)\n\n' +
+                  '⏰ Если не ответите через 48 часов — взнос автоматически перейдёт в следующий турнир.',
+            reply_markup: { inline_keyboard: [[
+              { text: '🔄 Следующий турнир', callback_data: 'refund_next_' + tournament.id + '_' + parseInt(entry.id) },
+              { text: '💸 Вернуть ' + refundAmount + ' TON', callback_data: 'refund_back_' + tournament.id + '_' + parseInt(entry.id) }
+            ]] }
+          }).catch(e => console.error('notify cancelled err:', e.message));
+        }
+      }
+      if (tournament.auto_repeat !== 0) scheduleNextWeeklyTournament();
+      return;
+    }
     const prizePool = tournament.prize_pool || 0;
     const dist = getPrizeDistribution(count);
     const winners = [];
@@ -627,7 +656,7 @@ app.get('/api/tournament', (req, res) => {
     const myUser  = db.prepare('SELECT tp FROM users WHERE id = ?').get(tgUser.id);
     const myTournamentTp = myEntry ? Math.max(0, (myUser?.tp || 0) - myEntry.tp_at_entry) : 0;
     const myLevel = getPlayerLevel(myUser?.tp || 0);
-    res.json({ success: true, tournament: { ...tournament, status: tournament.status, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, topPlayers, myTournamentTp, myLevel } });
+    res.json({ success: true, tournament: { ...tournament, status: tournament.status, prizePool: Math.round(prizePool * 100) / 100, playersCount, isInTournament, entryFee: TOURNAMENT_CONFIG.entryFee, prizePoolPercent: TOURNAMENT_CONFIG.prizePoolPercent * 100, platformPercent: TOURNAMENT_CONFIG.platformPercent * 100, minPlayers: TOURNAMENT_CONFIG.minPlayers, topPlayers, myTournamentTp, myLevel } });
   } catch (e) { console.error('/api/tournament error:', e); res.status(500).json({ error: e.message }); }
 });
 
@@ -724,6 +753,73 @@ app.post('/api/telegram-webhook', async (req, res) => {
                 text: `⭐ Stars payment\nUser: ${uid}\nPackage: ${pkg.label}\nStars: ${payment.total_amount}\nCharge: ${payment.telegram_payment_charge_id}`
               }).catch(() => {});
             }
+          }
+        }
+      }
+      return res.json({ ok: true });
+    }
+    // callback_query — выбор игрока при отменённом турнире
+    if (update.callback_query) {
+      const cq = update.callback_query;
+      const cbData = cq.data || '';
+      await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/answerCallbackQuery', { callback_query_id: cq.id }).catch(() => {});
+      if (cbData.startsWith('refund_next_') || cbData.startsWith('refund_back_')) {
+        const parts = cbData.split('_');
+        const choice = parts[1];
+        const tournamentId = parseInt(parts[2]);
+        const userId = parseInt(parts[3]);
+        const tournament = db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
+        if (!tournament || tournament.status !== 'cancelled') {
+          await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', { chat_id: userId, text: '❌ Турнир не найден или выбор уже сделан.' }).catch(() => {});
+          return res.json({ ok: true });
+        }
+        const entry = db.prepare('SELECT * FROM tournament_entries WHERE tournament_id = ? AND CAST(user_id AS INTEGER) = ?').get(tournamentId, userId);
+        if (!entry || entry.refund_choice) {
+          await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', { chat_id: userId, text: 'ℹ️ Вы уже сделали выбор.' }).catch(() => {});
+          return res.json({ ok: true });
+        }
+        if (choice === 'back') {
+          const refundAmount = Math.round(tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent * 100) / 100;
+          let refundStatus = 'pending';
+          if (CRYPTO_BOT_TOKEN && refundAmount > 0) {
+            try {
+              await axios.post(CRYPTO_API_URL + '/transfer', {
+                user_id: userId, asset: 'TON', amount: refundAmount.toString(),
+                spend_id: 'refund_' + tournamentId + '_' + userId,
+                comment: 'TapCrown #' + tournamentId + ' возврат взноса'
+              }, { headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN } });
+              refundStatus = 'paid';
+              console.log('Refund SUCCESS userId=' + userId + ' amount=' + refundAmount + ' TON');
+            } catch (e) {
+              refundStatus = 'failed';
+              console.error('Refund FAILED userId=' + userId + ' error=' + JSON.stringify(e.response?.data || e.message));
+            }
+          }
+          db.prepare('UPDATE tournament_entries SET refund_choice = ? WHERE tournament_id = ? AND CAST(user_id AS INTEGER) = ?').run('refund', tournamentId, userId);
+          const msg = refundStatus === 'paid'
+            ? '✅ ' + refundAmount + ' TON переведено в ваш CryptoBot кошелёк!'
+            : '❌ Не удалось отправить возврат. Обратитесь: @coinquestsupport';
+          await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', { chat_id: userId, text: msg }).catch(() => {});
+        } else {
+          db.prepare('UPDATE tournament_entries SET refund_choice = ? WHERE tournament_id = ? AND CAST(user_id AS INTEGER) = ?').run('next', tournamentId, userId);
+          const nextT = db.prepare("SELECT * FROM tournaments WHERE status IN ('active','scheduled') ORDER BY id ASC LIMIT 1").get();
+          if (nextT) {
+            const alreadyIn = db.prepare('SELECT id FROM tournament_entries WHERE tournament_id = ? AND CAST(user_id AS INTEGER) = ?').get(nextT.id, userId);
+            if (!alreadyIn) {
+              const userTp = db.prepare('SELECT tp FROM users WHERE id = ?').get(userId);
+              db.prepare('INSERT OR IGNORE INTO tournament_entries (tournament_id, user_id, paid_amount, payment_id, tp_at_entry) VALUES (?, ?, ?, ?, ?)')
+                .run(nextT.id, userId, tournament.entry_fee, 'carry_' + tournamentId, userTp?.tp || 0);
+              db.prepare('UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?')
+                .run(tournament.entry_fee * TOURNAMENT_CONFIG.prizePoolPercent, nextT.id);
+            }
+            await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+              chat_id: userId,
+              text: '✅ Взнос ' + tournament.entry_fee + ' TON перенесён в TapCrown #' + nextT.id + '!\nУдачи! 🏆'
+            }).catch(() => {});
+          } else {
+            await axios.post('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+              chat_id: userId, text: '✅ Взнос зарезервирован для следующего турнира.'
+            }).catch(() => {});
           }
         }
       }
@@ -987,7 +1083,7 @@ app.listen(PORT, async () => {
     try {
       const webhookUrl = `${SERVER_URL}/api/telegram-webhook`;
       const response = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
-        url: webhookUrl, allowed_updates: ['message', 'pre_checkout_query']
+        url: webhookUrl, allowed_updates: ['message', 'pre_checkout_query', 'callback_query']
       });
       if (response.data.ok) console.log(`✅ Telegram webhook registered: ${webhookUrl}`);
       else console.warn('⚠️ Telegram webhook failed:', response.data.description);
