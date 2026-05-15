@@ -19,7 +19,7 @@ const TOURNAMENT_CONFIG = {
   prizePoolPercent: 0.8,
   platformPercent: 0.2,
   currency: 'TON',
-  minPlayers: 20,
+  minPlayers: 2, // TEST
   refundChoiceHours: 48
 };
 
